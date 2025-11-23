@@ -3,22 +3,21 @@ This is an end-to-end test that uses VisProbe to find the minimum
 perturbation required to fool a ResNet50 model on a cat image.
 """
 
-import json
-
 import requests
 import torch
 from PIL import Image
 from torchvision.models import ResNet50_Weights, resnet50
-from torchvision.transforms import functional as F
 
 from visprobe.api.decorators import data_source, model, search
 from visprobe.strategies import FGSMStrategy
 
 # --- Configuration ---
 try:
-    response = requests.get(
-        "https://raw.githubusercontent.com/anishathalye/imagenet-simple-labels/master/imagenet-simple-labels.json"
+    imagenet_labels_url = (
+        "https://raw.githubusercontent.com/anishathalye/"
+        "imagenet-simple-labels/master/imagenet-simple-labels.json"
     )
+    response = requests.get(imagenet_labels_url)
     response.raise_for_status()
     IMAGENET_LABELS = response.json()
 except requests.exceptions.RequestException as e:
@@ -89,7 +88,7 @@ if __name__ == "__main__":
     result = test_cat_attack()
 
     if result.failure_threshold is not None:
-        print(f"\n--- 💡 VisProbe Search Complete ---")
+        print("\n--- 💡 VisProbe Search Complete ---")
         print(f"Failure Threshold: ε = {result.failure_threshold:.4f}")
         print(f"Model Queries: {result.model_queries}")
     else:

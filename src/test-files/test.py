@@ -2,22 +2,19 @@
 This is a test that uses a torch.hub.load model as the model.
 """
 
-import pickle
-
 import torch
 from cifar10_models.vgg import vgg11_bn
+from torchvision.datasets import CIFAR10
+from torchvision.transforms import Compose, Normalize, ToTensor
+
+from visprobe.api.decorators import data_source, model, search
+from visprobe.api.utils import cifar10_data_source
+from visprobe.properties.classification import LabelConstant
+from visprobe.strategies import FGSMStrategy
 
 # Pretrained model
 my_model = vgg11_bn(pretrained=True)
 my_model.eval()
-
-from torchvision.datasets import CIFAR10
-from torchvision.transforms import Compose, Normalize, ToTensor
-
-from visprobe.api.decorators import data_source, given, model, search
-from visprobe.api.utils import cifar10_data_source
-from visprobe.properties.classification import LabelConstant
-from visprobe.strategies import FGSMStrategy
 
 
 def build_cat_subset_normalized(num_images: int = 16):
