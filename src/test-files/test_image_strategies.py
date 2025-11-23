@@ -105,7 +105,4 @@ if __name__ == "__main__":
     total = rotation_result.total_samples
     print(f"✅ Test complete. Passed samples: {passed}/{total}")
 
-    print(
-        f"\n💡 Tip: run `visprobe visualize {__file__}` "
-        "for the interactive dashboard."
-    )
+    print(f"\n💡 Tip: run `visprobe visualize {__file__}` " "for the interactive dashboard.")

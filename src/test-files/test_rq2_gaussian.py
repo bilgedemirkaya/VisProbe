@@ -117,18 +117,14 @@ def _sanity_and_filter(
     if DEBUG:
         accuracy = num_correct / float(max(1, total))
         print(
-            f"[SANITY] Clean accuracy on initial batch: "
-            f"{num_correct}/{total} = {accuracy:.3f}"
+            f"[SANITY] Clean accuracy on initial batch: " f"{num_correct}/{total} = {accuracy:.3f}"
         )
         for i in range(min(8, total)):
             y = labels[i]
             p = pred[i]
             gt = class_names[y]
             pred_name = class_names[p]
-            print(
-                f"  idx={i:02d} gt={gt!s:<10} "
-                f"pred={pred_name!s:<10} conf={conf[i]:.2f}"
-            )
+            print(f"  idx={i:02d} gt={gt!s:<10} " f"pred={pred_name!s:<10} conf={conf[i]:.2f}")
 
     require_clean = os.getenv("RQ2_REQUIRE_CLEAN_CORRECT", "1") == "1"
     min_keep = int(os.getenv("RQ2_MIN_KEEP", "16"))
