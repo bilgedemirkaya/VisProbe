@@ -4,7 +4,9 @@
       "Bash(tree:*)",
       "Bash(rsync:*)",
       "Bash(mv:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(pip install:*)"
     ],
     "deny": [],
     "ask": []

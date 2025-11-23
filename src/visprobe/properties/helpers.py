@@ -29,12 +29,17 @@ def get_topk_predictions(output: torch.Tensor, k: int) -> Tuple[List[int], List[
         output = output[0]
     if output.numel() == 0:
         raise ValueError("Cannot get top-k predictions from empty tensor")
+
+    # Handle batched inputs by taking first element
+    if output.ndim == 2:
+        output = output[0]
+
     probabilities = F.softmax(output, dim=-1)
     confidences, pred_indices = torch.topk(probabilities, k, dim=-1)
-    # Ensure consistent list output
-    indices = pred_indices.squeeze().tolist()
-    confs = confidences.squeeze().tolist()
-    # Handle single element case (tolist returns scalar)
+    # Convert to lists
+    indices = pred_indices.tolist()
+    confs = confidences.tolist()
+    # Handle single element case (tolist returns scalar when k=1)
     if not isinstance(indices, list):
         indices = [indices]
         confs = [confs]

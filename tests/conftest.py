@@ -76,9 +76,9 @@ def reset_registry():
     """Reset the test registry before each test."""
     from visprobe.api.registry import TestRegistry
 
-    TestRegistry.clear_all()
+    TestRegistry.clear()
     yield
-    TestRegistry.clear_all()
+    TestRegistry.clear()
 
 
 @pytest.fixture

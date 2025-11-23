@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from .adversarial import APGDStrategy, BIMStrategy, FGSMStrategy, PGDStrategy, SquareAttackStrategy
 from .base import Strategy
-from .image import BrightnessStrategy, GaussianNoiseStrategy, RotateStrategy
+from .image import BrightnessStrategy, ContrastStrategy, GaussianNoiseStrategy, RotateStrategy
 
 __all__ = [
     "Strategy",
@@ -18,5 +18,6 @@ __all__ = [
     "SquareAttackStrategy",
     "GaussianNoiseStrategy",
     "BrightnessStrategy",
+    "ContrastStrategy",
     "RotateStrategy",
 ]

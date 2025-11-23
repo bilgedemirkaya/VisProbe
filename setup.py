@@ -8,7 +8,7 @@ setup(
     long_description_content_type="text/markdown",
     author="Bilge Demirkaya",
     author_email="bilgedemirkaya@example.com",
-    url="https://github.com/bilgedemirkaya/Visfuzz",
+    url="https://github.com/bilgedemirkaya/VisProbe",
     license="MIT",
     classifiers=[
         "Development Status :: 4 - Beta",
