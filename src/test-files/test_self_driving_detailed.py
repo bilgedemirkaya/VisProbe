@@ -355,9 +355,7 @@ def test_real_world_autonomous_driving(mode: str):
         # results.append(
         #     _run_safely(test_scenario_no_silent_degradation, "scenario: no silent degradation")
         # )
-        results.append(
-            _run_safely(test_scenario_top1_strict, "scenario: top-1 equality (strict)")
-        )
+        results.append(_run_safely(test_scenario_top1_strict, "scenario: top-1 equality (strict)"))
     else:
         print(f"[warn] Unknown mode '{mode}', defaulting to 'mixed'.")
         return test_real_world_autonomous_driving("mixed")
