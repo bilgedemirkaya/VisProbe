@@ -7,18 +7,23 @@ Gaussian Noise + LabelConstant
 - Grid/Oracle use noise_sweep; Adaptive uses search(max_queries=BUDGET).
 
 Run (Colab GPU example):
-  %pip -q install --upgrade --force-reinstall torch==2.6.0+cu124 torchvision==0.21.0+cu124 torchaudio==2.6.0+cu124 --index-url https://download.pytorch.org/whl/cu124
+  %pip -q install --upgrade --force-reinstall torch==2.6.0+cu124 \
+      torchvision==0.21.0+cu124 torchaudio==2.6.0+cu124 \
+      --index-url https://download.pytorch.org/whl/cu124
   # restart runtime
   import os
   os.environ["VISPROBE_DEVICE"]="cuda:0"
-  os.environ["RQ2_N"]="512"; os.environ["RQ2_BUDGET"]="16"; os.environ["RQ2_GRID_LEVELS"]="16"
-  os.environ["RQ2_ORACLE_LEVELS"]="101"; os.environ["RQ2_HI"]="0.50"; os.environ["RQ2_SEED"]="1337"
+  os.environ["RQ2_N"]="512"
+  os.environ["RQ2_BUDGET"]="16"
+  os.environ["RQ2_GRID_LEVELS"]="16"
+  os.environ["RQ2_ORACLE_LEVELS"]="101"
+  os.environ["RQ2_HI"]="0.50"
+  os.environ["RQ2_SEED"]="1337"
   !visprobe run test_rq2_gaussian.py --device cuda:0
 """
 
 import os
 import random
-import sys
 from typing import List, Tuple
 
 import torch
@@ -76,7 +81,7 @@ rn56 = torch.hub.load(
 ).eval()
 
 
-# ----------------- Sanity: check labels vs predictions; optionally filter to clean-correct -----------------
+# Sanity: check labels vs predictions; optionally filter to clean-correct
 def _pick_device() -> torch.device:
     env_device = os.environ.get("VISPROBE_DEVICE", "auto").lower()
     if env_device != "auto":
@@ -110,15 +115,16 @@ def _sanity_and_filter(
     correct_mask = [int(p) == int(y) for p, y in zip(pred, labels)]
     num_correct = sum(1 for v in correct_mask if v)
     if DEBUG:
+        accuracy = num_correct / float(max(1, total))
         print(
-            f"[SANITY] Clean accuracy on initial batch: {num_correct}/{total} = {num_correct/float(max(1,total)):.3f}"
+            f"[SANITY] Clean accuracy on initial batch: " f"{num_correct}/{total} = {accuracy:.3f}"
         )
         for i in range(min(8, total)):
             y = labels[i]
             p = pred[i]
-            print(
-                f"  idx={i:02d} gt={class_names[y]!s:<10} pred={class_names[p]!s:<10} conf={conf[i]:.2f}"
-            )
+            gt = class_names[y]
+            pred_name = class_names[p]
+            print(f"  idx={i:02d} gt={gt!s:<10} " f"pred={pred_name!s:<10} conf={conf[i]:.2f}")
 
     require_clean = os.getenv("RQ2_REQUIRE_CLEAN_CORRECT", "1") == "1"
     min_keep = int(os.getenv("RQ2_MIN_KEEP", "16"))
@@ -127,13 +133,15 @@ def _sanity_and_filter(
         if len(filtered) >= min_keep:
             if DEBUG:
                 print(
-                    f"[SANITY] Using only correctly classified images: {len(filtered)} kept (>= {min_keep})."
+                    f"[SANITY] Using only correctly classified images: "
+                    f"{len(filtered)} kept (>= {min_keep})."
                 )
             return filtered
         else:
             if DEBUG:
                 print(
-                    f"[SANITY] Too few clean-correct samples ({len(filtered)} < {min_keep}); keeping original set."
+                    f"[SANITY] Too few clean-correct samples "
+                    f"({len(filtered)} < {min_keep}); keeping original set."
                 )
     return images
 

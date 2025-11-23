@@ -4,8 +4,6 @@ such as brightness and rotation, to ensure the model's predictions
 remain robust.
 """
 
-import json
-
 import requests
 import torch
 from PIL import Image
@@ -16,9 +14,11 @@ from visprobe.strategies import BrightnessStrategy, RotateStrategy
 
 # --- Configuration ---
 try:
-    response = requests.get(
-        "https://raw.githubusercontent.com/anishathalye/imagenet-simple-labels/master/imagenet-simple-labels.json"
+    imagenet_labels_url = (
+        "https://raw.githubusercontent.com/anishathalye/"
+        "imagenet-simple-labels/master/imagenet-simple-labels.json"
     )
+    response = requests.get(imagenet_labels_url)
     response.raise_for_status()
     IMAGENET_LABELS = response.json()
 except requests.exceptions.RequestException as e:
@@ -95,14 +95,14 @@ def test_rotation_robustness(original, perturbed):
 if __name__ == "__main__":
     print("🔬 Running brightness test...")
     brightness_result = test_brightness_robustness()
-    print(
-        f"✅ Test complete. Passed samples: {brightness_result.passed_samples}/{brightness_result.total_samples}"
-    )
+    passed = brightness_result.passed_samples
+    total = brightness_result.total_samples
+    print(f"✅ Test complete. Passed samples: {passed}/{total}")
 
     print("\n🔬 Running rotation test...")
     rotation_result = test_rotation_robustness()
-    print(
-        f"✅ Test complete. Passed samples: {rotation_result.passed_samples}/{rotation_result.total_samples}"
-    )
+    passed = rotation_result.passed_samples
+    total = rotation_result.total_samples
+    print(f"✅ Test complete. Passed samples: {passed}/{total}")
 
-    print(f"\n💡 Tip: run `visprobe visualize {__file__}` for the interactive dashboard.")
+    print(f"\n💡 Tip: run `visprobe visualize {__file__}` " "for the interactive dashboard.")
