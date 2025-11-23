@@ -1,6 +1,6 @@
-# Contributing to Visfuzz
+# Contributing to VisProbe
 
-Thank you for your interest in contributing to Visfuzz! This document provides guidelines and instructions for contributing to the project.
+Thank you for your interest in contributing to VisProbe! This document provides guidelines and instructions for contributing to the project.
 
 ## Code of Conduct
 
@@ -36,8 +36,8 @@ We welcome feature requests! Please create an issue with:
 
 1. Clone your fork:
 ```bash
-git clone https://github.com/YOUR_USERNAME/Visfuzz.git
-cd Visfuzz
+git clone https://github.com/YOUR_USERNAME/VisProbe.git
+cd VisProbe
 ```
 
 2. Install in development mode with dev dependencies:
@@ -75,14 +75,14 @@ black src/
 ## Project Structure
 
 ```
-Visfuzz/
+VisProbe/
 ├── src/visprobe/
 │   ├── api/          # Core API and decorators
 │   ├── cli/          # Command-line interface
 │   ├── properties/   # Robustness properties
 │   └── strategies/   # Perturbation strategies
 ├── src/test-files/   # Example tests
-└── docs/             # Documentation
+└── tests/            # Unit tests
 ```
 
 ## Adding New Features
@@ -129,7 +129,12 @@ class MyNewProperty(Property):
 ## Testing
 
 ### Running Tests
-Currently, Visfuzz uses example-based testing. Run example tests with:
+Run unit tests with pytest:
+```bash
+pytest tests/
+```
+
+Run example tests with:
 ```bash
 visprobe run src/test-files/test_example.py
 ```
@@ -190,12 +195,12 @@ Releases are managed by maintainers. If you believe a release is needed:
 ## Questions?
 
 If you have questions about contributing:
-- Check existing [Issues](https://github.com/bilgedemirkaya/Visfuzz/issues)
+- Check existing [Issues](https://github.com/bilgedemirkaya/VisProbe/issues)
 - Create a new issue with your question
-- Join [GitHub Discussions](https://github.com/bilgedemirkaya/Visfuzz/discussions)
+- Join [GitHub Discussions](https://github.com/bilgedemirkaya/VisProbe/discussions)
 
 ## License
 
-By contributing to Visfuzz, you agree that your contributions will be licensed under the MIT License.
+By contributing to VisProbe, you agree that your contributions will be licensed under the MIT License.
 
-Thank you for contributing to Visfuzz!
+Thank you for contributing to VisProbe!

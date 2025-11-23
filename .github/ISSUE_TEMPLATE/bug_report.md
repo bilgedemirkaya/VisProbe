@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Report a bug to help us improve Visfuzz
+about: Report a bug to help us improve VisProbe
 title: '[BUG] '
 labels: bug
 assignees: ''
@@ -45,7 +45,7 @@ Paste the complete error message and stack trace here
 - **OS**: [e.g., Ubuntu 22.04, macOS 13.0, Windows 11]
 - **Python Version**: [e.g., 3.10.5]
 - **PyTorch Version**: [e.g., 2.0.1]
-- **Visfuzz Version**: [e.g., 0.1.0]
+- **VisProbe Version**: [e.g., 0.1.0]
 - **CUDA Version** (if applicable): [e.g., 11.8]
 
 ## Additional Context

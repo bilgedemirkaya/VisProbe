@@ -18,7 +18,7 @@ We take the security of VisProbe seriously. If you discover a security vulnerabi
 
 Instead, please report security vulnerabilities via:
 - Email: [Your security contact email]
-- GitHub Security Advisories: https://github.com/bilgedemirkaya/Visfuzz/security/advisories/new
+- GitHub Security Advisories: https://github.com/bilgedemirkaya/VisProbe/security/advisories/new
 
 ### What to Include
 
