@@ -173,7 +173,7 @@ export VISPROBE_PREFER_GPU=1      # Prefer GPU if available
 - **[Comprehensive API Reference](COMPREHENSIVE_API_REFERENCE.md)**: Complete API documentation
 - **[Device Management Guide](DEVICE_MANAGEMENT.md)**: Device configuration and troubleshooting
 - **[API Architecture Overview](API_OVERVIEW.md)**: Internal architecture details
-- **[Test Documentation](TEST_DOCUMENTATION.md)**: Example test patterns and use cases
+- **[Test Documentation](src/test-files/TEST_DOCUMENTATION.md)**: Example test patterns and use cases
 - **[Changelog](CHANGELOG.md)**: Version history and changes
 
 ## Contributing
@@ -200,14 +200,14 @@ If you use VisProbe in your research, please cite:
   title={VisProbe: Interactive Robustness Testing for Computer Vision Models},
   author={VisProbe Development Team},
   year={2025},
-  url={https://github.com/bilgedemirkaya/Visfuzz}
+  url={https://github.com/bilgedemirkaya/VisProbe}
 }
 ```
 
 ## Support
 
-- **Issues**: Report bugs and request features on [GitHub Issues](https://github.com/bilgedemirkaya/Visfuzz/issues)
-- **Discussions**: Join the community on [GitHub Discussions](https://github.com/bilgedemirkaya/Visfuzz/discussions)
+- **Issues**: Report bugs and request features on [GitHub Issues](https://github.com/bilgedemirkaya/VisProbe/issues)
+- **Discussions**: Join the community on [GitHub Discussions](https://github.com/bilgedemirkaya/VisProbe/discussions)
 - **Documentation**: Full documentation available in the repository
 
 ## Dashboard Features
