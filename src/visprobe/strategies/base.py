@@ -81,6 +81,20 @@ class Strategy:
         """
         raise NotImplementedError
 
+    def apply(self, imgs: Any, model: Any, level: Optional[float] = None) -> Any:
+        """
+        Alias for generate() to maintain backward compatibility.
+
+        Args:
+            imgs: Input images to perturb
+            model: The model being tested
+            level: Optional perturbation level
+
+        Returns:
+            Perturbed images
+        """
+        return self.generate(imgs, model, level)
+
     def query_cost(self) -> int:
         """
         Returns the number of additional model queries used by the strategy.

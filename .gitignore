@@ -142,6 +142,5 @@ checkpoints/
 # Streamlit
 .streamlit/
 
-# Visfuzz specific
 visprobe_results/
 *.pkl

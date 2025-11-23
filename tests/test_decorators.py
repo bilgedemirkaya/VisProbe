@@ -15,9 +15,9 @@ class TestGivenDecorator:
 
     def test_given_registers_test(self, simple_model, sample_batch):
         """Test that @given registers a test function."""
-        TestRegistry.clear_all()
+        TestRegistry.clear()
 
-        @given(strategy=GaussianNoiseStrategy(std_dev=0.1), property_fn=LabelConstant())
+        @given(strategy=GaussianNoiseStrategy(std_dev=0.1))
         def my_test(model_fn, data_fn):
             return simple_model, sample_batch[0]
 
@@ -29,7 +29,7 @@ class TestGivenDecorator:
 
         with pytest.raises(ValidationError, match="must accept at least 2 parameters"):
 
-            @given(strategy=GaussianNoiseStrategy(), property_fn=LabelConstant())
+            @given(strategy=GaussianNoiseStrategy(std_dev=0.1))
             def invalid_test(only_one_param):
                 pass
 
@@ -37,49 +37,56 @@ class TestGivenDecorator:
 class TestModelDecorator:
     """Tests for @model decorator."""
 
-    def test_model_registers(self, simple_model):
-        """Test that @model registers a model provider."""
-        TestRegistry.clear_all()
+    def test_model_attaches_metadata(self, simple_model):
+        """Test that @model attaches model metadata to function."""
 
-        @model
+        @model(simple_model)
         def my_model():
             return simple_model
 
-        assert len(TestRegistry.get_model_providers()) == 1
+        assert hasattr(my_model, '_visprobe_model')
+        assert my_model._visprobe_model is simple_model
 
-    def test_model_validates_signature(self):
-        """Test that @model validates function signature."""
-        from visprobe.api.decorators import ValidationError
+    def test_model_with_intermediate_layers(self, simple_model):
+        """Test that @model can capture intermediate layers."""
 
-        with pytest.raises(ValidationError, match="must accept exactly 0 parameters"):
+        @model(simple_model, capture_intermediate_layers=['layer1', 'layer2'])
+        def my_model():
+            return simple_model
 
-            @model
-            def invalid_model(unexpected_param):
-                pass
+        assert hasattr(my_model, '_visprobe_model')
+        assert hasattr(my_model, '_visprobe_capture_intermediate_layers')
+        assert my_model._visprobe_capture_intermediate_layers == ['layer1', 'layer2']
 
 
 class TestDataSourceDecorator:
     """Tests for @data_source decorator."""
 
-    def test_data_source_registers(self, sample_batch):
-        """Test that @data_source registers a data provider."""
-        TestRegistry.clear_all()
+    def test_data_source_attaches_metadata(self, sample_batch):
+        """Test that @data_source attaches data metadata to function."""
 
-        @data_source
+        @data_source(sample_batch[0])
         def my_data():
             return sample_batch[0]
 
-        assert len(TestRegistry.get_data_providers()) == 1
+        assert hasattr(my_data, '_visprobe_data')
+        assert my_data._visprobe_data is sample_batch[0]
 
-    def test_data_source_validates_signature(self):
-        """Test that @data_source validates function signature."""
-        from visprobe.api.decorators import ValidationError
+    def test_data_source_with_options(self, sample_batch):
+        """Test that @data_source can include optional parameters."""
 
-        with pytest.raises(ValidationError, match="must accept exactly 0 parameters"):
+        def my_collate(x):
+            return x
 
-            @data_source
-            def invalid_data(unexpected_param):
-                pass
+        @data_source(sample_batch[0], collate_fn=my_collate, class_names=['cat', 'dog'])
+        def my_data():
+            return sample_batch[0]
+
+        assert hasattr(my_data, '_visprobe_data')
+        assert hasattr(my_data, '_visprobe_collate')
+        assert hasattr(my_data, '_visprobe_class_names')
+        assert my_data._visprobe_collate is my_collate
+        assert my_data._visprobe_class_names == ['cat', 'dog']
 
 
 class TestSearchDecorator:
@@ -87,17 +94,16 @@ class TestSearchDecorator:
 
     def test_search_registers_test(self, simple_model, sample_batch):
         """Test that @search registers a search test."""
-        TestRegistry.clear_all()
+        TestRegistry.clear()
 
         @search(
-            strategy=GaussianNoiseStrategy(std_dev=0.1),
-            property_fn=LabelConstant(),
-            param_name="std_dev",
-            param_min=0.0,
-            param_max=1.0,
+            strategy=lambda l: GaussianNoiseStrategy(std_dev=l),
+            initial_level=0.01,
+            level_lo=0.0,
+            level_hi=1.0,
         )
-        def my_search(model_fn, data_fn):
-            return simple_model, sample_batch[0]
+        def my_search(original, perturbed):
+            return True
 
         assert len(TestRegistry.get_search_tests()) == 1
 
@@ -108,11 +114,8 @@ class TestSearchDecorator:
         with pytest.raises(ValidationError, match="must accept at least 2 parameters"):
 
             @search(
-                strategy=GaussianNoiseStrategy(),
-                property_fn=LabelConstant(),
-                param_name="std_dev",
-                param_min=0.0,
-                param_max=1.0,
+                strategy=lambda l: GaussianNoiseStrategy(std_dev=l),
+                initial_level=0.01,
             )
             def invalid_test(only_one_param):
                 pass
@@ -123,27 +126,27 @@ class TestRegistryIntegration:
 
     def test_multiple_tests_registered(self, simple_model, sample_batch):
         """Test that multiple tests can be registered."""
-        TestRegistry.clear_all()
+        TestRegistry.clear()
 
-        @given(strategy=GaussianNoiseStrategy(std_dev=0.1), property_fn=LabelConstant())
-        def test1(model_fn, data_fn):
-            return simple_model, sample_batch[0]
+        @given(strategy=GaussianNoiseStrategy(std_dev=0.1))
+        def test1(original, perturbed):
+            return True
 
-        @given(strategy=GaussianNoiseStrategy(std_dev=0.2), property_fn=LabelConstant())
-        def test2(model_fn, data_fn):
-            return simple_model, sample_batch[0]
+        @given(strategy=GaussianNoiseStrategy(std_dev=0.2))
+        def test2(original, perturbed):
+            return True
 
         assert len(TestRegistry.get_given_tests()) == 2
 
     def test_registry_clear(self, simple_model, sample_batch):
         """Test that registry can be cleared."""
-        TestRegistry.clear_all()
+        TestRegistry.clear()
 
-        @given(strategy=GaussianNoiseStrategy(std_dev=0.1), property_fn=LabelConstant())
-        def test1(model_fn, data_fn):
-            return simple_model, sample_batch[0]
+        @given(strategy=GaussianNoiseStrategy(std_dev=0.1))
+        def test1(original, perturbed):
+            return True
 
         assert len(TestRegistry.get_given_tests()) == 1
 
-        TestRegistry.clear_all()
+        TestRegistry.clear()
         assert len(TestRegistry.get_given_tests()) == 0

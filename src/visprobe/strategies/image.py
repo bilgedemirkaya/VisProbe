@@ -160,6 +160,9 @@ class BrightnessStrategy(Strategy):
         self, imgs: torch.Tensor, model: nn.Module, level: Optional[float] = None
     ) -> torch.Tensor:
         factor = level if level is not None else self.brightness_factor
+        # Special case: factor=1.0 should return unchanged images
+        if factor == 1.0:
+            return imgs
         return F.adjust_brightness(imgs, factor)
 
     def __str__(self) -> str:
@@ -167,6 +170,35 @@ class BrightnessStrategy(Strategy):
 
     def __repr__(self) -> str:
         return f"BrightnessStrategy(brightness_factor={self.brightness_factor})"
+
+
+class ContrastStrategy(Strategy):
+    """
+    Contrast adjustment perturbation.
+
+    Args:
+        contrast_factor: Multiplier for contrast (1.0 = unchanged)
+    """
+
+    def __init__(self, contrast_factor: float):
+        if contrast_factor < 0.0:
+            raise ValueError("contrast_factor must be non-negative")
+        self.contrast_factor = float(contrast_factor)
+
+    def generate(
+        self, imgs: torch.Tensor, model: nn.Module, level: Optional[float] = None
+    ) -> torch.Tensor:
+        factor = level if level is not None else self.contrast_factor
+        # Special case: factor=1.0 should return unchanged images
+        if factor == 1.0:
+            return imgs
+        return F.adjust_contrast(imgs, factor)
+
+    def __str__(self) -> str:
+        return f"ContrastStrategy(factor={self.contrast_factor})"
+
+    def __repr__(self) -> str:
+        return f"ContrastStrategy(contrast_factor={self.contrast_factor})"
 
 
 class RotateStrategy(Strategy):
