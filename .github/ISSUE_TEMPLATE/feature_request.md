@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Suggest a new feature or enhancement for Visfuzz
+about: Suggest a new feature or enhancement for VisProbe
 title: '[FEATURE] '
 labels: enhancement
 assignees: ''
