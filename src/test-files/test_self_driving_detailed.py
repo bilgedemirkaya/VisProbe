@@ -1,4 +1,3 @@
-import json
 import os
 
 # --- macOS-friendly runtime hygiene ---
@@ -6,7 +5,6 @@ import warnings
 from typing import List, Tuple
 
 import torch
-import torch.nn.functional as F
 import torchvision.datasets as dsets
 import torchvision.transforms as T
 
@@ -342,12 +340,24 @@ def test_real_world_autonomous_driving(mode: str):
         results.append(_run_safely(test_natural_only_top1, "natural_only: top1"))
         results.append(_run_safely(test_natural_only_conf, "natural_only: confidence guard"))
     elif mode in ("mixed", "scenario"):
-        # results.append(_run_safely(test_scenario_safety, "scenario: safety (top5+conf)"))
-        # results.append(_run_safely(test_scenario_topk_identical, "scenario: topk identical (J=1.0)"))
-        # results.append(_run_safely(test_scenario_rank_top3, "scenario: rank ceiling (≤3)"))
-        # results.append(_run_safely(test_scenario_logit_l2, "scenario: logits L2 ≤ 1.0"))
-        # results.append(_run_safely(test_scenario_no_silent_degradation, "scenario: no silent degradation"))
-        results.append(_run_safely(test_scenario_top1_strict, "scenario: top-1 equality (strict)"))
+        # results.append(
+        #     _run_safely(test_scenario_safety, "scenario: safety (top5+conf)")
+        # )
+        # results.append(
+        #     _run_safely(test_scenario_topk_identical, "scenario: topk identical (J=1.0)")
+        # )
+        # results.append(
+        #     _run_safely(test_scenario_rank_top3, "scenario: rank ceiling (≤3)")
+        # )
+        # results.append(
+        #     _run_safely(test_scenario_logit_l2, "scenario: logits L2 ≤ 1.0")
+        # )
+        # results.append(
+        #     _run_safely(test_scenario_no_silent_degradation, "scenario: no silent degradation")
+        # )
+        results.append(
+            _run_safely(test_scenario_top1_strict, "scenario: top-1 equality (strict)")
+        )
     else:
         print(f"[warn] Unknown mode '{mode}', defaulting to 'mixed'.")
         return test_real_world_autonomous_driving("mixed")

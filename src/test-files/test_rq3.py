@@ -1,10 +1,9 @@
 import argparse
 import io
 import json
-import math
 import os
 import random
-from typing import Callable, Dict, Optional, Tuple
+from typing import Callable, Dict, Tuple
 
 import numpy as np
 import torch
@@ -14,7 +13,6 @@ from PIL import Image
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from torchvision.transforms import functional as TF
-from tqdm import tqdm
 
 # -------------------------
 # Attempt to import Exp1 utilities
@@ -41,16 +39,19 @@ for name in EXP1_IMPORT_CANDIDATES:
 
 if exp1 is None:
 
-    class _MissingExp1(Exception): ...
+    class _MissingExp1(Exception):
+        pass
 
     def get_model(device):
         raise _MissingExp1(
-            "Experiment 1 utilities not found. Provide get_model(device) in exp1_setup.py (or adjust import)."
+            "Experiment 1 utilities not found. Provide get_model(device) in "
+            "exp1_setup.py (or adjust import)."
         )
 
     def get_test_loader(batch_size, num_workers=2, shuffle=False):
         raise _MissingExp1(
-            "Provide get_test_loader(batch_size, num_workers, shuffle) for CIFAR-10 test set (shuffle=False)."
+            "Provide get_test_loader(batch_size, num_workers, shuffle) for "
+            "CIFAR-10 test set (shuffle=False)."
         )
 
     def get_normalize():
@@ -185,15 +186,15 @@ def find_break_threshold_binary(
     y_hi = _predict_single(forward_fn, apply_fn(x0_cpu, hi), device)
     if y_hi == y_ref:
         return hi, False
-    l, r = lo, hi
+    left, right = lo, hi
     for _ in range(steps):
-        mid = (l + r) / 2.0
+        mid = (left + right) / 2.0
         y_mid = _predict_single(forward_fn, apply_fn(x0_cpu, mid), device)
         if y_mid != y_ref:
-            r = mid
+            right = mid
         else:
-            l = mid
-    return r, True
+            left = mid
+    return right, True
 
 
 def brightness_threshold(
@@ -494,7 +495,6 @@ class Experiment2Runner:
         where prediction differs from clean prediction; if never flips, return 6.
         """
         Xc = load_cifar10c_corruption(root, corruption)  # (50000,32,32,3)
-        severities = []
         # precompute predictions for s=1..5
         preds_by_s = {}
         for s in range(1, 6):

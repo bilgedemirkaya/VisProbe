@@ -1,14 +1,12 @@
-import json
 import os
 from typing import List, Tuple
 
 import torch
-import torch.nn.functional as F
 import torchvision.datasets as dsets
 import torchvision.transforms as T
 
 # Auto-configure VisProbe for stability
-import visprobe.auto_init
+import visprobe.auto_init  # noqa: F401
 from visprobe.api.decorators import data_source, given, model
 from visprobe.properties import ConfidenceDrop, LabelConstant, Property, TopKStability
 from visprobe.strategies import BrightnessStrategy, FGSMStrategy, GaussianNoiseStrategy

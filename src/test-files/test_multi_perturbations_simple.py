@@ -13,7 +13,7 @@ from torchvision.datasets import CIFAR10
 from torchvision.transforms import Compose, Normalize, ToTensor
 
 # Auto-configure VisProbe for stability (device, threading, warnings)
-import visprobe.auto_init
+import visprobe.auto_init  # noqa: F401
 from visprobe.api.decorators import data_source, given, model, search
 from visprobe.api.utils import cifar10_data_source
 from visprobe.properties.classification import LabelConstant

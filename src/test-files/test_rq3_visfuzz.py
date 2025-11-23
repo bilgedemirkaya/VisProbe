@@ -17,14 +17,13 @@ correlation workflow in test_rq3.py can be reproduced downstream from the JSONs.
 
 import os
 import random
-import sys
 from typing import List, Tuple
 
 import torch
 import torchvision.datasets as dsets
 import torchvision.transforms as T
 
-from visprobe.api.decorators import data_source, given, model, search
+from visprobe.api.decorators import data_source, model, search
 from visprobe.properties.classification import LabelConstant
 from visprobe.strategies import (
     BrightnessStrategy,
