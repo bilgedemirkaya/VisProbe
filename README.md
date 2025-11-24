@@ -206,6 +206,8 @@ export VISPROBE_PREFER_GPU=1      # Prefer GPU if available
 
 - **[Comprehensive API Reference](COMPREHENSIVE_API_REFERENCE.md)**: Complete API documentation
 - **[Device Management Guide](DEVICE_MANAGEMENT.md)**: Device configuration and troubleshooting
+- **[Troubleshooting Guide](TROUBLESHOOTING.md)**: Common issues and solutions
+- **[Performance Guide](PERFORMANCE.md)**: Optimization tips and benchmarks
 - **[API Architecture Overview](API_OVERVIEW.md)**: Internal architecture details
 - **[Test Documentation](examples/TEST_DOCUMENTATION.md)**: Example test patterns and use cases
 - **[Changelog](CHANGELOG.md)**: Version history and changes
