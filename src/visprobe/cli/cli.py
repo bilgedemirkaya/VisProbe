@@ -11,6 +11,40 @@ import sys
 import tempfile
 
 
+def _validate_test_file(file_path: str) -> str:
+    """
+    Validate and sanitize test file path to prevent command injection.
+
+    Args:
+        file_path: Path to the test file
+
+    Returns:
+        Absolute path to the validated test file
+
+    Raises:
+        SystemExit: If validation fails
+    """
+    # Convert to absolute path
+    abs_path = os.path.abspath(file_path)
+
+    # Check if file exists
+    if not os.path.exists(abs_path):
+        print(f"❌ Error: Test file not found at '{abs_path}'")
+        sys.exit(1)
+
+    # Check if it's a file (not a directory)
+    if not os.path.isfile(abs_path):
+        print(f"❌ Error: Path is not a file: '{abs_path}'")
+        sys.exit(1)
+
+    # Check if it has a .py extension
+    if not abs_path.endswith('.py'):
+        print(f"❌ Error: Test file must be a Python file (.py): '{abs_path}'")
+        sys.exit(1)
+
+    return abs_path
+
+
 def get_results_dir() -> str:
     """Returns the results directory path (cross-platform)."""
     env_dir = os.environ.get("VISPROBE_RESULTS_DIR")
@@ -34,10 +68,13 @@ def _check_for_results(module_path: str) -> bool:
 
 def _run_test_file(test_file_path: str, device: str | None = None):
     """Executes a given Python test file as a subprocess."""
-    print(f"🔬 No results found. Running test file first: {os.path.basename(test_file_path)}")
+    # Validate the test file path to prevent command injection
+    validated_path = _validate_test_file(test_file_path)
+
+    print(f"🔬 No results found. Running test file first: {os.path.basename(validated_path)}")
 
     # Get the correct module name from the file path
-    module_name = os.path.splitext(os.path.basename(test_file_path))[0]
+    module_name = os.path.splitext(os.path.basename(validated_path))[0]
 
     # Set an environment variable so the runner can save the report with the correct name
     env = os.environ.copy()
@@ -46,7 +83,8 @@ def _run_test_file(test_file_path: str, device: str | None = None):
         env["VISPROBE_DEVICE"] = device
 
     try:
-        subprocess.run([sys.executable, test_file_path], check=True, env=env)
+        # Use validated path in subprocess.run with list arguments (not shell)
+        subprocess.run([sys.executable, validated_path], check=True, env=env)
     except subprocess.CalledProcessError as e:
         print(f"❌ Test file exited with an error: {e}")
         sys.exit(1)
@@ -57,10 +95,8 @@ def _run_test_file(test_file_path: str, device: str | None = None):
 
 def run_command(args: argparse.Namespace):
     """Handles the 'visprobe run' command."""
-    test_file = os.path.abspath(args.test_file)
-    if not os.path.exists(test_file):
-        print(f"❌ Error: Test file not found at '{test_file}'")
-        sys.exit(1)
+    # Validate the test file (also converts to absolute path)
+    test_file = _validate_test_file(args.test_file)
 
     results_dir = get_results_dir()
     if not args.keep and os.path.isdir(results_dir):
@@ -75,10 +111,8 @@ def run_command(args: argparse.Namespace):
 
 def visualize_command(args: argparse.Namespace):
     """Handles the 'visprobe visualize' command."""
-    test_file = os.path.abspath(args.test_file)
-    if not os.path.exists(test_file):
-        print(f"❌ Error: Test file not found at '{test_file}'")
-        sys.exit(1)
+    # Validate the test file (also converts to absolute path)
+    test_file = _validate_test_file(args.test_file)
 
     # Automatically run the test if no results are found
     if not _check_for_results(test_file):
@@ -93,6 +127,7 @@ def visualize_command(args: argparse.Namespace):
 
     print("🚀 Launching dashboard…")
 
+    # Use validated test file path in subprocess command (list arguments, not shell)
     command = ["streamlit", "run", dashboard_path, "--", test_file]
 
     try:

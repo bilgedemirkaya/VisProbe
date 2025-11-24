@@ -6,7 +6,13 @@
       "Bash(mv:*)",
       "Bash(find:*)",
       "Bash(python -m pytest:*)",
-      "Bash(pip install:*)"
+      "Bash(pip install:*)",
+      "Bash(python -m visprobe:*)",
+      "Bash(python:*)",
+      "Bash(RQ3_N=10 python:*)",
+      "Bash(streamlit run:*)",
+      "Bash(pip uninstall:*)",
+      "Bash(pytest:*)"
     ],
     "deny": [],
     "ask": []

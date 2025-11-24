@@ -17,8 +17,10 @@ We take the security of VisProbe seriously. If you discover a security vulnerabi
 **DO NOT** open a public issue for security vulnerabilities.
 
 Instead, please report security vulnerabilities via:
-- Email: [Your security contact email]
+- Email: bilgedemirkaya@example.com
 - GitHub Security Advisories: https://github.com/bilgedemirkaya/VisProbe/security/advisories/new
+
+For critical vulnerabilities, please use GitHub Security Advisories for secure, private reporting.
 
 ### What to Include
 

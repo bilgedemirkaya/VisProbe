@@ -142,5 +142,11 @@ checkpoints/
 # Streamlit
 .streamlit/
 
+# VisProbe results and test artifacts
 visprobe_results/
 *.pkl
+
+# Example outputs (keep examples/ directory but ignore outputs)
+examples/*.json
+examples/*.csv
+examples/*.png

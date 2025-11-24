@@ -88,6 +88,40 @@ pip install -e ".[dev]"
 pip install -e ".[viz]"
 ```
 
+## Security Considerations
+
+⚠️ **IMPORTANT: Please read before using VisProbe**
+
+### Model Loading Security
+
+VisProbe loads and executes PyTorch models, which can contain arbitrary Python code. **Only load models from trusted sources.**
+
+**Risks:**
+- PyTorch's `torch.load()` uses pickle, which can execute arbitrary code
+- Malicious models can compromise your system, steal data, or execute harmful operations
+- Models from untrusted sources should be treated as potentially dangerous
+
+**Best Practices:**
+1. **Only use models from trusted sources** (official model zoos, verified researchers, your own trained models)
+2. **Never load models from unknown or untrusted sources**
+3. **Use `torch.load()` with `weights_only=True` when possible** for models that support it
+4. **Inspect model code before loading** if available as source
+5. **Run tests in isolated environments** (containers, VMs) when testing untrusted models
+6. **Keep PyTorch and dependencies updated** to get the latest security patches
+
+### Data Security
+
+- Test results may contain sensitive information about model vulnerabilities
+- Store test results securely and limit access appropriately
+- Be cautious when sharing test results publicly, as they may reveal attack vectors
+
+### Additional Security Notes
+
+- VisProbe executes user-provided test files as Python scripts
+- Results are saved to `/tmp/visprobe_results` by default (configurable via `VISPROBE_RESULTS_DIR`)
+- The CLI validates file paths to prevent path traversal attacks
+- See [SECURITY.md](SECURITY.md) for reporting security vulnerabilities
+
 ## Quick Start Examples
 
 ### Basic Adversarial Testing
@@ -173,7 +207,7 @@ export VISPROBE_PREFER_GPU=1      # Prefer GPU if available
 - **[Comprehensive API Reference](COMPREHENSIVE_API_REFERENCE.md)**: Complete API documentation
 - **[Device Management Guide](DEVICE_MANAGEMENT.md)**: Device configuration and troubleshooting
 - **[API Architecture Overview](API_OVERVIEW.md)**: Internal architecture details
-- **[Test Documentation](src/test-files/TEST_DOCUMENTATION.md)**: Example test patterns and use cases
+- **[Test Documentation](examples/TEST_DOCUMENTATION.md)**: Example test patterns and use cases
 - **[Changelog](CHANGELOG.md)**: Version history and changes
 
 ## Contributing

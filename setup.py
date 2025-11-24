@@ -7,7 +7,7 @@ setup(
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
     author="Bilge Demirkaya",
-    author_email="bilgedemirkaya@example.com",
+    author_email="bilgedemirkaya07@gmail.com",
     url="https://github.com/bilgedemirkaya/VisProbe",
     license="MIT",
     classifiers=[
