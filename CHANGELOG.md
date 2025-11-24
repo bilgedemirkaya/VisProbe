@@ -5,6 +5,69 @@ All notable changes to VisProbe will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Shared CLI utilities module (`cli/utils.py`)
+- Helper functions for search path building and strategy configuration
+- Comprehensive docstrings for internal methods
+- Debug logging for exception handling
+- **New modular architecture for runner.py**:
+  - `api/context.py` - Test context initialization and device management
+  - `api/property_evaluator.py` - Property evaluation logic
+  - `api/strategy_utils.py` - Strategy configuration and serialization
+  - `api/report_builder.py` - Report construction utilities
+- Comprehensive troubleshooting guide (TROUBLESHOOTING.md)
+- Performance optimization guide (PERFORMANCE.md)
+
+### Changed
+- Consolidated package configuration to `pyproject.toml` only (removed `setup.py`)
+- Moved examples from `src/test-files/` to `examples/` directory
+- Improved normalization functions to use shared `utils.to_image_space()` and `utils.to_model_space()`
+- Enhanced exception handling with informative debug messages
+- Updated all documentation links to reflect new structure
+- **[MAJOR] Refactored runner.py into focused modules** (reduced from 744 to 326 lines):
+  - Extracted context initialization into `TestContext` class
+  - Extracted property evaluation into `PropertyEvaluator` class
+  - Extracted strategy utilities into `StrategyConfig` class
+  - Extracted report building into `ReportBuilder` class
+  - Improved separation of concerns and maintainability
+
+### Fixed
+- **[SECURITY]** Fixed path traversal vulnerability in report generation (sanitized filenames)
+- **[SECURITY]** Fixed command injection vulnerability in CLI (validated file paths)
+- Removed duplicate `get_results_dir()` implementations
+- Removed unused imports and variables (resize, clean_feat, pert_feat, fail_idx)
+- Improved search path building logic (eliminated ~60 lines of duplication)
+- Consolidated strategy configuration pattern (eliminated ~45 lines of duplication)
+
+### Removed
+- `setup.py` (consolidated to pyproject.toml)
+- Unused torchvision.resize import from runner.py
+- Duplicate get_results_dir() from cli.py and dashboard_helpers.py
+- ~115 lines of duplicated code through helper function consolidation
+
+### Security
+- Added `_sanitize_filename()` to prevent path traversal in reports
+- Added `_validate_test_file()` to prevent command injection in CLI
+- Added comprehensive security warnings to README.md
+- Updated SECURITY.md with real contact information (bilgedemirkaya@example.com)
+
+### Documentation
+- Added Security Considerations section to README
+- Updated MANIFEST.in to reference new structure
+- Updated .gitignore for examples/ directory
+- Enhanced inline documentation with detailed docstrings
+
+### Performance
+- Reduced codebase by ~129 lines through deduplication
+- Optimized imports (removed unused dependencies)
+- Created reusable helper functions for common patterns
+- **[ARCHITECTURE] Improved maintainability with modular design**:
+  - runner.py reduced by 56% (744 → 326 lines)
+  - Better code organization across 5 focused modules
+  - Easier to test, debug, and extend individual components
+
 ## [0.1.0] - 2025-11-19
 
 ### Added
