@@ -17,6 +17,87 @@ from .model_wrap import _ModelWithIntermediateOutput  # noqa: E402
 from .query_counter import QueryCounter  # noqa: E402
 
 
+# ===== Helper Functions =====
+
+
+def _build_search_path_entry(
+    pert_out: torch.Tensor,
+    level: float,
+    batch_pass: bool,
+    passed_mask: List[bool],
+    passed_frac: float,
+    class_names: Optional[List[str]],
+) -> Dict[str, Any]:
+    """
+    Build a standardized search path entry dictionary.
+
+    Args:
+        pert_out: Perturbed model output (logits)
+        level: Current perturbation level
+        batch_pass: Whether the batch passed the property test
+        passed_mask: Per-sample pass/fail mask
+        passed_frac: Fraction of samples that passed
+        class_names: List of class names for predictions
+
+    Returns:
+        Dictionary containing level, pass status, predictions, and confidences
+    """
+    pert_pred_labels = torch.argmax(pert_out, dim=-1)
+    pred_indices = pert_pred_labels.tolist()
+    conf_list = torch.softmax(pert_out, dim=-1).max(dim=-1).values.tolist()
+
+    return {
+        "level": float(level),
+        "passed": batch_pass,
+        "passed_all": all(passed_mask),
+        "passed_frac": float(passed_frac),
+        "passed_mask": passed_mask,
+        "prediction": (
+            class_names[pred_indices[0]] if class_names else str(pred_indices[0])
+        ),
+        "confidence": conf_list[0],
+        "predictions": [
+            class_names[i] if class_names else str(i) for i in pred_indices
+        ],
+        "confidences": conf_list,
+    }
+
+
+def _configure_strategy_safe(perturb_obj: Any, runner: Any) -> None:
+    """
+    Safely configure a perturbation strategy with context from runner.
+
+    Attempts to call configure() method with mean/std/seed. Falls back
+    to direct attribute setting if configure() is not available.
+
+    Args:
+        perturb_obj: The perturbation strategy object to configure
+        runner: TestRunner instance with context containing mean/std/seed
+    """
+    try:
+        perturb_obj.configure(
+            mean=runner.context["mean"],
+            std=runner.context["std"],
+            seed=runner.context.get("seed"),
+        )
+    except Exception:
+        # Fallback: use internal _configure_strategy if available
+        try:
+            from .runner import TestRunner as _TR
+            _TR._configure_strategy(
+                perturb_obj,
+                runner.context["mean"],
+                runner.context["std"],
+                None,
+            )
+        except Exception:
+            # If both fail, strategy will use its defaults
+            pass
+
+
+# ===== Strategy Resolution =====
+
+
 def resolve_strategy_for_level(runner, params: Dict[str, Any], level: float):
     strategy_spec = params["strategy"]
     perturb_obj = None
@@ -110,21 +191,7 @@ def perform_adaptive_search(  # noqa: C901
 
         # Resolve and configure strategy for this level
         perturb_obj = resolve_strategy_for_level(runner, params, level)
-        try:
-            perturb_obj.configure(
-                mean=runner.context["mean"],
-                std=runner.context["std"],
-                seed=runner.context.get("seed"),
-            )
-        except Exception:
-            try:
-                from .runner import TestRunner as _TR
-
-                _TR._configure_strategy(
-                    perturb_obj, runner.context["mean"], runner.context["std"], None
-                )
-            except Exception:
-                pass
+        _configure_strategy_safe(perturb_obj, runner)
 
         with QueryCounter(m) as qc:
             pert_tensor = perturb_obj.generate(batch_tensor, model=m, level=level)
@@ -142,28 +209,11 @@ def perform_adaptive_search(  # noqa: C901
 
         runner.query_count += qc.extra
 
-        # Log predictions/confidence (first sample for summary, full lists for details)
-        pert_pred_labels = torch.argmax(pert_out_i, dim=-1)
-        pred_indices = pert_pred_labels.tolist()
-        conf_list = torch.softmax(pert_out_i, dim=-1).max(dim=-1).values.tolist()
+        # Log predictions/confidence using helper function
         path.append(
-            {
-                "level": float(level),
-                "passed": batch_pass,
-                "passed_all": all(passed_mask),
-                "passed_frac": float(passed_frac),
-                "passed_mask": passed_mask,
-                "prediction": (
-                    ctx["class_names"][pred_indices[0]]
-                    if ctx["class_names"]
-                    else str(pred_indices[0])
-                ),
-                "confidence": conf_list[0],
-                "predictions": [
-                    ctx["class_names"][i] if ctx["class_names"] else str(i) for i in pred_indices
-                ],
-                "confidences": conf_list,
-            }
+            _build_search_path_entry(
+                pert_out_i, level, batch_pass, passed_mask, passed_frac, ctx["class_names"]
+            )
         )
 
         if top_k:
@@ -473,21 +523,7 @@ def perform_binary_search(  # noqa: C901
 
         # Resolve and configure strategy for this level
         perturb_obj = resolve_strategy_for_level(runner, params, level)
-        try:
-            perturb_obj.configure(
-                mean=runner.context["mean"],
-                std=runner.context["std"],
-                seed=runner.context.get("seed"),
-            )
-        except Exception:
-            try:
-                from .runner import TestRunner as _TR
-
-                _TR._configure_strategy(
-                    perturb_obj, runner.context["mean"], runner.context["std"], None
-                )
-            except Exception:
-                pass
+        _configure_strategy_safe(perturb_obj, runner)
 
         with QueryCounter(m) as qc:
             pert_tensor = perturb_obj.generate(batch_tensor, model=m, level=level)
@@ -505,28 +541,11 @@ def perform_binary_search(  # noqa: C901
 
         runner.query_count += qc.extra
 
-        # Log this iteration
-        pert_pred_labels = torch.argmax(pert_out_i, dim=-1)
-        pred_indices = pert_pred_labels.tolist()
-        conf_list = torch.softmax(pert_out_i, dim=-1).max(dim=-1).values.tolist()
+        # Log this iteration using helper function
         path.append(
-            {
-                "level": float(level),
-                "passed": batch_pass,
-                "passed_all": all(passed_mask),
-                "passed_frac": float(passed_frac),
-                "passed_mask": passed_mask,
-                "prediction": (
-                    ctx["class_names"][pred_indices[0]]
-                    if ctx["class_names"]
-                    else str(pred_indices[0])
-                ),
-                "confidence": conf_list[0],
-                "predictions": [
-                    ctx["class_names"][i] if ctx["class_names"] else str(i) for i in pred_indices
-                ],
-                "confidences": conf_list,
-            }
+            _build_search_path_entry(
+                pert_out_i, level, batch_pass, passed_mask, passed_frac, ctx["class_names"]
+            )
         )
 
         if top_k:

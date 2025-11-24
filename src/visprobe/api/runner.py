@@ -724,13 +724,19 @@ class TestRunner:
 
     # --- Helper: normalization utilities ---
     def _denorm(self, tensor: torch.Tensor) -> torch.Tensor:
-        """Converts a normalized tensor back to pixel space (0‒1)."""
-        mean = torch.tensor(self.context["mean"], device=tensor.device).view(3, 1, 1)
-        std = torch.tensor(self.context["std"], device=tensor.device).view(3, 1, 1)
-        return tensor * std + mean
+        """
+        Converts a normalized tensor back to pixel space (0‒1).
+
+        This is a convenience wrapper around utils.to_image_space().
+        """
+        from .utils import to_image_space
+        return to_image_space(tensor, self.context["mean"], self.context["std"])
 
     def _renorm(self, tensor: torch.Tensor) -> torch.Tensor:
-        """Normalizes a pixel-space tensor using the context mean/std."""
-        mean = torch.tensor(self.context["mean"], device=tensor.device).view(3, 1, 1)
-        std = torch.tensor(self.context["std"], device=tensor.device).view(3, 1, 1)
-        return (tensor - mean) / std
+        """
+        Normalizes a pixel-space tensor using the context mean/std.
+
+        This is a convenience wrapper around utils.to_model_space().
+        """
+        from .utils import to_model_space
+        return to_model_space(tensor, self.context["mean"], self.context["std"])

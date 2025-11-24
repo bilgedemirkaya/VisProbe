@@ -8,7 +8,8 @@ import argparse
 import os
 import subprocess
 import sys
-import tempfile
+
+from .utils import get_results_dir
 
 
 def _validate_test_file(file_path: str) -> str:
@@ -43,14 +44,6 @@ def _validate_test_file(file_path: str) -> str:
         sys.exit(1)
 
     return abs_path
-
-
-def get_results_dir() -> str:
-    """Returns the results directory path (cross-platform)."""
-    env_dir = os.environ.get("VISPROBE_RESULTS_DIR")
-    if env_dir:
-        return os.path.abspath(env_dir)
-    return os.path.join(tempfile.gettempdir(), "visprobe_results")
 
 
 def _check_for_results(module_path: str) -> bool:

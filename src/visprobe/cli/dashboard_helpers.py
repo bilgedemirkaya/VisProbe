@@ -9,7 +9,6 @@ import io
 import json
 import logging
 import os
-import tempfile
 from typing import Any, Dict, Optional
 
 import altair as alt
@@ -17,15 +16,9 @@ import pandas as pd
 import streamlit as st
 from PIL import Image
 
+from .utils import get_results_dir
+
 logger = logging.getLogger(__name__)
-
-
-def get_results_dir() -> str:
-    """Returns the results directory path (cross-platform)."""
-    env_dir = os.environ.get("VISPROBE_RESULTS_DIR")
-    if env_dir:
-        return os.path.abspath(env_dir)
-    return os.path.join(tempfile.gettempdir(), "visprobe_results")
 
 
 def _get_image_bytes(image_dict: dict) -> Optional[bytes]:
