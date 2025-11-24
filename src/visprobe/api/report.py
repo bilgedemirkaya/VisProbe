@@ -9,6 +9,7 @@ import csv
 import io
 import json
 import os
+import re
 import tempfile
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
@@ -17,6 +18,30 @@ import torch
 import torchvision.transforms as T
 
 __all__ = ["ImageData", "Report", "PerturbationInfo"]
+
+
+def _sanitize_filename(name: str) -> str:
+    """
+    Sanitize a filename to prevent path traversal attacks.
+
+    Removes directory separators and other potentially dangerous characters,
+    keeping only alphanumeric characters, underscores, hyphens, and periods.
+
+    Args:
+        name: The filename to sanitize
+
+    Returns:
+        A safe filename string
+    """
+    # Remove any path components (e.g., "../", "/etc/", etc.)
+    name = os.path.basename(name)
+    # Replace any remaining potentially dangerous characters
+    # Keep only alphanumeric, underscore, hyphen, and period
+    name = re.sub(r'[^a-zA-Z0-9_\-.]', '_', name)
+    # Prevent empty strings or strings that are only periods
+    if not name or name.strip('.') == '':
+        name = 'unnamed_test'
+    return name
 
 
 def get_results_dir() -> str:
@@ -175,15 +200,17 @@ class Report:
         try:
             results_dir = get_results_dir()
             os.makedirs(results_dir, exist_ok=True)
+            # Sanitize test name to prevent path traversal
+            safe_name = _sanitize_filename(self.test_name)
             data = self._build_serializable_dict(results_dir=results_dir)
-            file_path = os.path.join(results_dir, f"{self.test_name}.json")
+            file_path = os.path.join(results_dir, f"{safe_name}.json")
             with open(file_path, "w") as f:
                 json.dump(data, f, cls=NumpyEncoder, indent=2)
             print(f"✅ Report saved to {file_path}")
             # Also save a CSV for quick plotting if per-sample exists
             try:
                 if self.per_sample:
-                    csv_path = os.path.join(results_dir, f"{self.test_name}.csv")
+                    csv_path = os.path.join(results_dir, f"{safe_name}.csv")
                     fieldnames = sorted({k for row in self.per_sample for k in row.keys()})
                     with open(csv_path, "w", newline="") as cf:
                         writer = csv.DictWriter(cf, fieldnames=fieldnames)
@@ -215,7 +242,9 @@ class Report:
                 return None
             try:
                 img_bytes = base64.b64decode(b64_str)
-                img_path = os.path.join(results_dir, f"{self.test_name}.{suffix}.png")
+                # Sanitize test name to prevent path traversal
+                safe_name = _sanitize_filename(self.test_name)
+                img_path = os.path.join(results_dir, f"{safe_name}.{suffix}.png")
                 with open(img_path, "wb") as imf:
                     imf.write(img_bytes)
                 return img_path
