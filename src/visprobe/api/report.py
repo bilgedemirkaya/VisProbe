@@ -77,6 +77,18 @@ class PanelImage:
         std: Optional[List[float]] = None,
         caption: str = "",
     ) -> "PanelImage":
+        """
+        Create a PanelImage from a tensor.
+
+        Args:
+            tensor: Image tensor to convert
+            mean: Optional channel means for denormalization
+            std: Optional channel stds for denormalization
+            caption: Caption text for the image
+
+        Returns:
+            PanelImage instance with base64-encoded image
+        """
         if mean is not None and std is not None:
             mean_t = torch.tensor(mean).view(3, 1, 1)
             std_t = torch.tensor(std).view(3, 1, 1)

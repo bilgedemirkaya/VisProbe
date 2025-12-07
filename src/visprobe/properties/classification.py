@@ -23,6 +23,16 @@ class LabelConstant(Property):
     """
 
     def __call__(self, original: Any, perturbed: Any) -> bool:
+        """
+        Check if top-1 predictions are identical for all samples.
+
+        Args:
+            original: Original model outputs
+            perturbed: Perturbed model outputs
+
+        Returns:
+            True if all predictions match, False otherwise
+        """
         original_output = extract_logits(original)
         perturbed_output = extract_logits(perturbed)
         original_labels = torch.argmax(original_output, dim=-1)
@@ -62,6 +72,16 @@ class TopKStability(Property):
         self.min_jaccard = min_jaccard
 
     def __call__(self, original: Any, perturbed: Any) -> bool:
+        """
+        Check if top-k predictions satisfy the stability criterion.
+
+        Args:
+            original: Original model outputs
+            perturbed: Perturbed model outputs
+
+        Returns:
+            True if the stability condition is met, False otherwise
+        """
         original_indices, _ = get_topk_predictions(extract_logits(original), self.k)
         perturbed_indices, _ = get_topk_predictions(extract_logits(perturbed), self.k)
         original_set, perturbed_set = set(original_indices), set(perturbed_indices)

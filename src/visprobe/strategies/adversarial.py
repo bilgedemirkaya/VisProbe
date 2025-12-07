@@ -95,7 +95,16 @@ class _ARTStrategyBase(Strategy):
         self._cache_key = None
 
     def _get_classifier(self, model: nn.Module, imgs: torch.Tensor) -> "PyTorchClassifier":
-        """Get or create cached classifier."""
+        """
+        Get or create cached ART classifier.
+
+        Args:
+            model: PyTorch model to wrap
+            imgs: Sample images for inferring model properties
+
+        Returns:
+            Cached or newly created PyTorchClassifier
+        """
         key = (id(model), imgs.shape[1:], str(imgs.device))
         if self._cache_key != key:
             self._cached_classifier = _create_art_classifier(model, imgs)
@@ -133,6 +142,17 @@ class FGSMStrategy(_ARTStrategyBase):
     def generate(
         self, imgs: torch.Tensor, model: nn.Module, level: Optional[float] = None
     ) -> torch.Tensor:
+        """
+        Generate FGSM adversarial examples.
+
+        Args:
+            imgs: Input images
+            model: Model to attack
+            level: Optional epsilon value (overrides instance value)
+
+        Returns:
+            Adversarial examples
+        """
         estimator = self._get_classifier(model, imgs)
         attack = FastGradientMethod(
             estimator=estimator,
@@ -143,6 +163,7 @@ class FGSMStrategy(_ARTStrategyBase):
         return self._run_attack(attack, imgs)
 
     def query_cost(self) -> int:
+        """FGSM requires 1 gradient computation."""
         return 1
 
     def __str__(self) -> str:
@@ -178,6 +199,17 @@ class PGDStrategy(_ARTStrategyBase):
     def generate(
         self, imgs: torch.Tensor, model: nn.Module, level: Optional[float] = None
     ) -> torch.Tensor:
+        """
+        Generate PGD adversarial examples.
+
+        Args:
+            imgs: Input images
+            model: Model to attack
+            level: Optional epsilon value (overrides instance value)
+
+        Returns:
+            Adversarial examples
+        """
         estimator = self._get_classifier(model, imgs)
         attack = ProjectedGradientDescent(
             estimator=estimator,
@@ -189,6 +221,7 @@ class PGDStrategy(_ARTStrategyBase):
         return self._run_attack(attack, imgs)
 
     def query_cost(self) -> int:
+        """PGD requires max_iter gradient computations."""
         return self.max_iter
 
     def __str__(self) -> str:
@@ -223,6 +256,17 @@ class BIMStrategy(_ARTStrategyBase):
     def generate(
         self, imgs: torch.Tensor, model: nn.Module, level: Optional[float] = None
     ) -> torch.Tensor:
+        """
+        Generate BIM adversarial examples.
+
+        Args:
+            imgs: Input images
+            model: Model to attack
+            level: Optional epsilon value (overrides instance value)
+
+        Returns:
+            Adversarial examples
+        """
         estimator = self._get_classifier(model, imgs)
         attack = BasicIterativeMethod(
             estimator=estimator,
@@ -234,6 +278,7 @@ class BIMStrategy(_ARTStrategyBase):
         return self._run_attack(attack, imgs)
 
     def query_cost(self) -> int:
+        """BIM requires max_iter gradient computations."""
         return self.max_iter
 
     def __str__(self) -> str:
@@ -265,6 +310,17 @@ class APGDStrategy(_ARTStrategyBase):
     def generate(
         self, imgs: torch.Tensor, model: nn.Module, level: Optional[float] = None
     ) -> torch.Tensor:
+        """
+        Generate Auto-PGD adversarial examples.
+
+        Args:
+            imgs: Input images
+            model: Model to attack
+            level: Optional epsilon value (overrides instance value)
+
+        Returns:
+            Adversarial examples
+        """
         estimator = self._get_classifier(model, imgs)
         attack = AutoProjectedGradientDescent(
             estimator=estimator,
@@ -275,6 +331,7 @@ class APGDStrategy(_ARTStrategyBase):
         return self._run_attack(attack, imgs)
 
     def query_cost(self) -> int:
+        """APGD requires max_iter gradient computations."""
         return self.max_iter
 
     def __str__(self) -> str:
@@ -306,6 +363,17 @@ class SquareAttackStrategy(_ARTStrategyBase):
     def generate(
         self, imgs: torch.Tensor, model: nn.Module, level: Optional[float] = None
     ) -> torch.Tensor:
+        """
+        Generate Square Attack adversarial examples.
+
+        Args:
+            imgs: Input images
+            model: Model to attack
+            level: Optional epsilon value (overrides instance value)
+
+        Returns:
+            Adversarial examples
+        """
         estimator = self._get_classifier(model, imgs)
         attack = SquareAttack(
             estimator=estimator,
@@ -316,6 +384,7 @@ class SquareAttackStrategy(_ARTStrategyBase):
         return self._run_attack(attack, imgs)
 
     def query_cost(self) -> int:
+        """Square Attack requires max_iter forward passes."""
         return self.max_iter
 
     def __str__(self) -> str:

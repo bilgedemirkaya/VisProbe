@@ -26,6 +26,15 @@ class _ModelWithIntermediateOutput(nn.Module):
                 self._hooks.append(hook)
 
     def _make_hook(self, name: str) -> Callable:
+        """
+        Creates a forward hook to capture layer outputs.
+
+        Args:
+            name: Name of the layer to capture
+
+        Returns:
+            Hook function that stores detached layer outputs
+        """
         def hook(module, input, output):
             # Detach to avoid tracking gradients and reduce graph retention
             try:
@@ -37,11 +46,21 @@ class _ModelWithIntermediateOutput(nn.Module):
         return hook
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+        """
+        Forward pass with intermediate layer output capture.
+
+        Args:
+            x: Input tensor
+
+        Returns:
+            Tuple of (model_output, dict_of_intermediate_features)
+        """
         self._features.clear()
         output = self.model(x)
         return output, self._features.copy()
 
     def __del__(self):
+        """Cleanup hooks on deletion to prevent memory leaks."""
         for hook in self._hooks:
             try:
                 hook.remove()

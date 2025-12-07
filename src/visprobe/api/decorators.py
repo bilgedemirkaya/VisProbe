@@ -109,7 +109,22 @@ def _validate_search_params(  # noqa: C901
 
 
 def model(model_obj: Any, *, capture_intermediate_layers: Optional[List[str]] = None):
-    """Attaches a model to a VisProbe test."""
+    """
+    Attaches a model to a VisProbe test.
+
+    Args:
+        model_obj: The PyTorch model to test
+        capture_intermediate_layers: Optional list of layer names to capture during forward pass
+
+    Returns:
+        Decorator function that attaches model to the test function
+
+    Example:
+        @model(my_resnet, capture_intermediate_layers=["layer4"])
+        @given(strategy=GaussianNoiseStrategy(std=0.05))
+        def test_robustness(original, perturbed):
+            assert original["output"].argmax() == perturbed["output"].argmax()
+    """
 
     def decorator(func: Callable) -> Callable:
         func._visprobe_model = model_obj
@@ -127,7 +142,26 @@ def data_source(
     mean: Optional[List[float]] = None,
     std: Optional[List[float]] = None,
 ):
-    """Provides the data source for a VisProbe test."""
+    """
+    Provides the data source for a VisProbe test.
+
+    Args:
+        data_obj: Data source (tensor, dataset, or any object)
+        collate_fn: Optional function to collate data into batches
+        class_names: Optional list of class names for visualization
+        mean: Channel means for denormalization (defaults to ImageNet means)
+        std: Channel stds for denormalization (defaults to ImageNet stds)
+
+    Returns:
+        Decorator function that attaches data configuration to the test function
+
+    Example:
+        @data_source(test_images, class_names=["cat", "dog"], mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+        @model(my_model)
+        @given(strategy=GaussianNoiseStrategy(std=0.05))
+        def test_robustness(original, perturbed):
+            assert original["output"].argmax() == perturbed["output"].argmax()
+    """
 
     def decorator(func: Callable) -> Callable:
         func._visprobe_data = data_obj

@@ -99,6 +99,20 @@ def _configure_strategy_safe(perturb_obj: Any, runner: Any) -> None:
 
 
 def resolve_strategy_for_level(runner, params: Dict[str, Any], level: float):
+    """
+    Resolve a strategy specification at a specific perturbation level.
+
+    Handles both factory callables and static strategy objects, setting
+    the appropriate level/eps attribute.
+
+    Args:
+        runner: TestRunner instance with context
+        params: Search parameters containing strategy specification
+        level: Perturbation level to use
+
+    Returns:
+        Configured Strategy instance
+    """
     strategy_spec = params["strategy"]
     perturb_obj = None
     if callable(strategy_spec):
@@ -281,6 +295,20 @@ def perform_adaptive_search(  # noqa: C901
 
 
 def perform_grid_search(runner, params: Dict[str, Any], clean_results: Tuple) -> Dict:  # noqa: C901
+    """
+    Perform grid search by testing evenly-spaced perturbation levels.
+
+    Tests a fixed number of levels uniformly distributed between level_lo and level_hi.
+    Stops at the first failure point.
+
+    Args:
+        runner: TestRunner instance
+        params: Search parameters (level_lo, level_hi, num_levels, etc.)
+        clean_results: Tuple of (clean_logits, clean_features)
+
+    Returns:
+        Dictionary with failure_threshold, path, and top_k_path
+    """
     ctx = runner.context
     m, batch_tensor = ctx["model"], ctx["batch_tensor"]
     clean_logits, _ = clean_results
@@ -378,6 +406,20 @@ def perform_grid_search(runner, params: Dict[str, Any], clean_results: Tuple) ->
 def perform_random_search(  # noqa: C901
     runner, params: Dict[str, Any], clean_results: Tuple
 ) -> Dict:
+    """
+    Perform random search by sampling perturbation levels uniformly.
+
+    Randomly samples num_samples levels between level_lo and level_hi,
+    tracking the minimum failure level encountered.
+
+    Args:
+        runner: TestRunner instance
+        params: Search parameters (level_lo, level_hi, num_samples, etc.)
+        clean_results: Tuple of (clean_logits, clean_features)
+
+    Returns:
+        Dictionary with failure_threshold, path, top_k_path, and fail_levels
+    """
     ctx = runner.context
     m, batch_tensor = ctx["model"], ctx["batch_tensor"]
     clean_logits, _ = clean_results

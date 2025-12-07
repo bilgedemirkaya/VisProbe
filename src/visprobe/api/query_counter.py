@@ -28,11 +28,13 @@ class QueryCounter:
         return output
 
     def __enter__(self):
+        """Register forward hook when entering context."""
         # Register the forward hook
         self._hook_handle = self.model.register_forward_hook(self._forward_hook)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        """Remove forward hook when exiting context."""
         # Remove the hook to avoid memory leaks
         if self._hook_handle is not None:
             self._hook_handle.remove()

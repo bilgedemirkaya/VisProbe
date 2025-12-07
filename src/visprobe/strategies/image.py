@@ -21,6 +21,7 @@ class NoOpStrategy(Strategy):
     def generate(
         self, imgs: torch.Tensor, model: nn.Module, level: Optional[float] = None
     ) -> torch.Tensor:
+        """Return images unchanged (identity transformation)."""
         return imgs
 
     def __str__(self) -> str:
@@ -159,6 +160,17 @@ class BrightnessStrategy(Strategy):
     def generate(
         self, imgs: torch.Tensor, model: nn.Module, level: Optional[float] = None
     ) -> torch.Tensor:
+        """
+        Apply brightness adjustment to images.
+
+        Args:
+            imgs: Input images
+            model: Model (unused)
+            level: Optional brightness factor (overrides instance value)
+
+        Returns:
+            Brightness-adjusted images
+        """
         factor = level if level is not None else self.brightness_factor
         # Special case: factor=1.0 should return unchanged images
         if factor == 1.0:
@@ -188,6 +200,17 @@ class ContrastStrategy(Strategy):
     def generate(
         self, imgs: torch.Tensor, model: nn.Module, level: Optional[float] = None
     ) -> torch.Tensor:
+        """
+        Apply contrast adjustment to images.
+
+        Args:
+            imgs: Input images
+            model: Model (unused)
+            level: Optional contrast factor (overrides instance value)
+
+        Returns:
+            Contrast-adjusted images
+        """
         factor = level if level is not None else self.contrast_factor
         # Special case: factor=1.0 should return unchanged images
         if factor == 1.0:
@@ -215,6 +238,17 @@ class RotateStrategy(Strategy):
     def generate(
         self, imgs: torch.Tensor, model: nn.Module, level: Optional[float] = None
     ) -> torch.Tensor:
+        """
+        Apply rotation to images.
+
+        Args:
+            imgs: Input images
+            model: Model (unused)
+            level: Optional rotation angle in degrees (overrides instance value)
+
+        Returns:
+            Rotated images
+        """
         angle = level if level is not None else self.angle
         return F.rotate(imgs, angle)
 

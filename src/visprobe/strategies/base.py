@@ -78,6 +78,14 @@ class Strategy:
     def generate(self, imgs: Any, model: Any, level: Optional[float] = None) -> Any:
         """
         Generates a perturbed version of the input images.
+
+        Args:
+            imgs: Input images to perturb
+            model: The model being tested
+            level: Optional perturbation level
+
+        Returns:
+            Perturbed images
         """
         raise NotImplementedError
 
@@ -98,6 +106,9 @@ class Strategy:
     def query_cost(self) -> int:
         """
         Returns the number of additional model queries used by the strategy.
+
+        Returns:
+            Number of extra model forward passes required
         """
         return 0
 
@@ -112,9 +123,11 @@ class _CallableStrategy(Strategy):
         self.level = level
 
     def generate(self, imgs: Any, model: Any) -> Any:
+        """Apply the callable perturbation function."""
         return self._fn(self.level, imgs, model)
 
     def query_cost(self) -> int:
+        """Callables have no extra query cost."""
         return 0
 
 
@@ -125,6 +138,17 @@ class CompositeStrategy(Strategy):
         self.strategies: List[Strategy] = list(strategies)
 
     def generate(self, imgs: Any, model: Any, level: Optional[float] = None) -> Any:
+        """
+        Apply all strategies sequentially.
+
+        Args:
+            imgs: Input images
+            model: The model being tested
+            level: Optional perturbation level passed to all strategies
+
+        Returns:
+            Images after all perturbations applied
+        """
         out = imgs
         for strat in self.strategies:
             # Some strategies accept level in generate; pass when provided
@@ -135,7 +159,12 @@ class CompositeStrategy(Strategy):
         return out
 
     def query_cost(self) -> int:
-        # Sum of inner strategy query costs (best-effort; actual counted by QueryCounter)
+        """
+        Sum of inner strategy query costs.
+
+        Returns:
+            Total query cost of all composed strategies
+        """
         total = 0
         for strat in self.strategies:
             try:
