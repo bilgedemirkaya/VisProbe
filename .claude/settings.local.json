@@ -12,7 +12,12 @@
       "Bash(RQ3_N=10 python:*)",
       "Bash(streamlit run:*)",
       "Bash(pip uninstall:*)",
-      "Bash(pytest:*)"
+      "Bash(pytest:*)",
+      "Bash(python3:*)",
+      "Bash(chmod:*)",
+      "Bash(source venv/bin/activate)",
+      "Bash(mkdocs serve:*)",
+      "Bash(visprobe-auto-docs:*)"
     ],
     "deny": [],
     "ask": []

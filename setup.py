@@ -45,11 +45,14 @@ setup(
     extras_require={
         "dev": ["pytest>=7.0.0", "black>=23.0.0"],
         "viz": ["altair>=4.2.0"],
+        "ai-docs": ["anthropic>=0.18.0"],
     },
 
     entry_points={
         'console_scripts': [
-            'visprobe=visprobe.cli:main',
+            'visprobe=visprobe.cli.cli:main',
+            'visprobe-update-docs=scripts.update_docs:main',
+            'visprobe-auto-docs=scripts.auto_update_docs:main',
         ],
     },
 )

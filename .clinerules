@@ -1,0 +1,231 @@
+# Claude Rules for VisProbe
+
+## Documentation Update Policy
+
+### CRITICAL: Always Update Documentation When Code Changes
+
+When making ANY code changes, you MUST update the corresponding documentation:
+
+1. **Function/Class Changes**
+   - If you modify a function signature → Update API reference in `docs/api/index.md`
+   - If you add a new function → Add it to API reference with full documentation
+   - If you change function behavior → Update user guide examples
+   - If you remove a function → Remove from all documentation
+
+2. **New Features**
+   - Add to `docs/user-guide.md` with examples
+   - Add to `docs/api/index.md` with API reference
+   - Add code example to `docs/examples/index.md`
+   - Update `docs/index.md` if it's a major feature
+   - Update architecture diagrams in `docs/architecture.md` if structure changes
+
+3. **Decorators and Public API**
+   - Any change to `@model`, `@data_source`, `@given`, `@search` → Update all docs
+   - Parameter changes → Update API reference AND user guide examples
+   - New parameters → Document in both places with examples
+
+4. **Strategies (Perturbations)**
+   - New strategy → Add to user guide and API reference
+   - Modified strategy → Update examples and API docs
+   - Deprecated strategy → Mark as deprecated in docs
+
+5. **Properties (Robustness Tests)**
+   - New property → Add to user guide and API reference
+   - Modified property → Update all examples using it
+   - Changed parameters → Update API reference
+
+6. **Bug Fixes**
+   - If behavior changes → Update examples and user guide
+   - If it affects documented behavior → Update relevant sections
+
+7. **Architecture Changes**
+   - Module reorganization → Update `docs/architecture.md`
+   - New design patterns → Update `docs/design-rationale.md`
+   - Data flow changes → Update architecture diagrams
+
+## Documentation Checklist
+
+Before completing ANY code change task, verify:
+
+- [ ] Updated `docs/api/index.md` if API changed
+- [ ] Updated `docs/user-guide.md` if user-facing functionality changed
+- [ ] Updated `docs/examples/index.md` if examples need modification
+- [ ] Updated `docs/architecture.md` if structure changed
+- [ ] Updated `docs/design-rationale.md` if design decisions changed
+- [ ] Updated docstrings in the code itself
+- [ ] Verified documentation builds: `mkdocs build --strict`
+- [ ] Checked for broken links
+
+## File Mapping: Code → Documentation
+
+```
+src/visprobe/api/decorators.py
+  ↓
+  docs/api/index.md (Decorators section)
+  docs/user-guide.md (Writing Tests section)
+  docs/examples/index.md (All examples)
+
+src/visprobe/strategies/
+  ↓
+  docs/api/index.md (Strategies section)
+  docs/user-guide.md (Perturbation Strategies section)
+  docs/examples/index.md (Strategy examples)
+
+src/visprobe/properties/
+  ↓
+  docs/api/index.md (Properties section)
+  docs/user-guide.md (Robustness Properties section)
+  docs/examples/index.md (Property examples)
+
+src/visprobe/api/runner.py
+  ↓
+  docs/architecture.md (Core Engine section)
+  docs/design-rationale.md (if logic changes)
+
+src/visprobe/api/search_modes.py
+  ↓
+  docs/user-guide.md (Search Modes section)
+  docs/architecture.md (Search algorithm diagrams)
+  docs/design-rationale.md (Search algorithm design)
+```
+
+## Special Cases
+
+### Adding a New Decorator
+1. Update `docs/api/index.md` with full signature and parameters
+2. Add example to `docs/user-guide.md`
+3. Add complete example to `docs/examples/index.md`
+4. Update quick start in `docs/index.md` if it's commonly used
+
+### Adding a New Strategy
+1. Add class documentation to `docs/api/index.md`
+2. Add usage section to `docs/user-guide.md` (Perturbation Strategies)
+3. Add at least one example to `docs/examples/index.md`
+4. If it's a new category, update architecture diagram
+
+### Adding a New Property
+1. Add class documentation to `docs/api/index.md`
+2. Add usage section to `docs/user-guide.md` (Robustness Properties)
+3. Add example to `docs/examples/index.md`
+
+### Changing Search Algorithm
+1. Update flowchart in `docs/architecture.md`
+2. Update explanation in `docs/user-guide.md`
+3. Update design rationale in `docs/design-rationale.md`
+4. Update examples if API changed
+
+### Breaking Changes
+1. Add migration guide to `docs/user-guide.md`
+2. Update ALL examples
+3. Mark old behavior as deprecated in docs
+4. Update API reference with clear warnings
+
+## Documentation Style Guide
+
+### Code Examples
+- Must be **complete and runnable**
+- Include imports at the top
+- Use realistic variable names
+- Add comments for non-obvious parts
+- Test that examples actually work
+
+### API Reference
+- Include **full function signature** with types
+- Document **all parameters** with descriptions
+- Include **return type** and description
+- Add **examples** for complex functions
+- Note any **exceptions** that can be raised
+
+### User Guide
+- Start with **simple examples** first
+- Show **common use cases** before edge cases
+- Include **troubleshooting** for common errors
+- Use **progressive disclosure** (basic → advanced)
+
+### Diagrams
+- Use **Mermaid** for all diagrams
+- Keep diagrams **simple and focused**
+- Label **all components** clearly
+- Use **consistent styling** across diagrams
+
+## Validation Commands
+
+Before considering documentation "complete", run:
+
+```bash
+# Check documentation builds
+mkdocs build --strict
+
+# Serve locally to check
+mkdocs serve
+
+# Check for broken links (if available)
+# linkchecker http://127.0.0.1:8000
+```
+
+## When Documentation Is Optional
+
+Documentation updates are NOT required for:
+- Internal helper functions (starting with `_`)
+- Test files
+- Build scripts
+- CI/CD configuration
+- Minor refactoring with no API changes
+
+## Auto-Documentation from Docstrings
+
+Remember: Code docstrings should be complete because they inform the docs.
+When updating a function:
+1. Update the docstring FIRST
+2. Then update the documentation based on the docstring
+
+## Example Workflow
+
+When user asks: "Add a new strategy for salt-and-pepper noise"
+
+Your response should:
+1. ✅ Implement the strategy in `src/visprobe/strategies/image.py`
+2. ✅ Add docstring to the class
+3. ✅ Update `docs/api/index.md` with API reference
+4. ✅ Add section to `docs/user-guide.md` explaining usage
+5. ✅ Add example to `docs/examples/index.md`
+6. ✅ Mention in completion message: "Documentation updated in user guide, API reference, and examples"
+
+## Reminders
+
+- **NEVER** say "documentation updated" without actually updating it
+- **ALWAYS** update examples when API changes
+- **CHECK** that Mermaid diagrams render correctly
+- **VERIFY** links work between documentation pages
+- **TEST** code examples are runnable
+
+## Priority Order
+
+When time is limited, update in this order:
+1. API Reference (most critical)
+2. User Guide examples
+3. Code examples
+4. Architecture diagrams
+5. Design rationale
+
+## Questions to Ask Yourself
+
+Before marking a task complete:
+- [ ] If someone reads just the docs, would they know about this change?
+- [ ] Are all code examples still accurate?
+- [ ] Do the diagrams reflect the current architecture?
+- [ ] Would this change confuse existing users reading old docs?
+
+## Special Instructions for Major Changes
+
+If the change affects more than 3 documentation files:
+1. List all files that need updates
+2. Update them systematically
+3. Create a checklist
+4. Verify each one is updated before moving on
+
+---
+
+**Remember: Documentation is not an afterthought. It's part of the feature.**
+
+If you change code without updating docs, the feature is incomplete.
