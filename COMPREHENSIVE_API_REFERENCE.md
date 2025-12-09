@@ -1,501 +1,680 @@
-# VisProbe: Comprehensive API Reference
+# VisProbe: Complete API Reference
 
-This document provides a complete reference for the VisProbe API, including all decorators, strategies, properties, and usage patterns.
+This document provides a comprehensive reference for the VisProbe API.
 
 ## Table of Contents
 
-1. [Core Decorators](#core-decorators)
-2. [Perturbation Strategies](#perturbation-strategies)
-3. [Robustness Properties](#robustness-properties)
-4. [Data Handling](#data-handling)
-5. [Configuration](#configuration)
+1. [Quick Check API](#quick-check-api)
+2. [Report Object](#report-object)
+3. [Presets](#presets)
+4. [Strategies](#strategies)
+5. [Properties](#properties)
 6. [Advanced Usage](#advanced-usage)
 
-## Core Decorators
+---
 
-### @given
+## Quick Check API
 
-Defines a test with fixed perturbation parameters.
+### `quick_check()`
+
+The primary function for testing model robustness.
 
 ```python
-@given(
-    strategy: Strategy,
-    vectorized: bool = False,
-    noise_sweep: Optional[Dict[str, Any]] = None,
-    resolutions: Optional[List[Tuple[int, int]]] = None,
-    top_k: Optional[int] = 5,
-    property_name: Optional[str] = None
+from visprobe import quick_check
+
+report = quick_check(
+    model,
+    data,
+    preset="standard",
+    budget=1000,
+    device="auto",
+    output_dir="visprobe_results",
+    mean=None,
+    std=None
 )
 ```
 
 **Parameters:**
-- `strategy`: The perturbation strategy to apply
-- `vectorized`: Whether to process samples in batches (default: False)
-- `noise_sweep`: Configuration for noise sensitivity analysis
-- `resolutions`: List of (height, width) tuples for resolution analysis
-- `top_k`: Number of top predictions to analyze (default: 5)
-- `property_name`: Optional display name for the property
+
+- **`model`** (required): Your PyTorch model (nn.Module) or any callable that takes tensors and returns logits
+- **`data`** (required): Test data in any of these formats:
+  - `DataLoader` object
+  - `TensorDataset` object
+  - List of `(image, label)` tuples
+  - Tuple of `(images_tensor, labels_tensor)`
+- **`preset`** (str, default="standard"): Which preset to use
+  - `"standard"` - Balanced mix including compositional perturbations
+  - `"lighting"` - Brightness, contrast, gamma variations
+  - `"blur"` - Gaussian blur, motion blur, JPEG compression
+  - `"corruption"` - Noise, artifacts, degradation
+- **`budget`** (int, default=1000): Maximum number of model queries per strategy
+  - Higher budget = more precise failure thresholds
+  - Recommended: 500-1000 for most use cases
+- **`device`** (str, default="auto"): Device to run on
+  - `"auto"` - Auto-detect (CUDA → MPS → CPU)
+  - `"cuda"` - Force CUDA GPU
+  - `"mps"` - Force Apple Silicon GPU
+  - `"cpu"` - Force CPU
+- **`output_dir`** (str, default="visprobe_results"): Where to save results
+- **`mean`** (tuple, optional): Normalization mean (e.g., `(0.485, 0.456, 0.406)`)
+  - If None, assumes data is already normalized or in [0, 1]
+- **`std`** (tuple, optional): Normalization std dev (e.g., `(0.229, 0.224, 0.225)`)
+  - If None, assumes data is already normalized or in [0, 1]
+
+**Returns:**
+
+A `Report` object with test results.
+
+**Example:**
+
+```python
+import torch
+import torchvision.models as models
+from visprobe import quick_check
+
+# Load model
+model = models.resnet18(weights='IMAGENET1K_V1')
+model.eval()
+
+# Prepare test data
+test_data = [(torch.randn(3, 224, 224), 0) for _ in range(50)]
+
+# Test robustness
+report = quick_check(
+    model=model,
+    data=test_data,
+    preset="standard",
+    budget=1000,
+    device="auto"
+)
+
+# View results
+report.show()
+print(f"Robustness Score: {report.score:.1%}")
+```
+
+---
+
+## Report Object
+
+The `Report` object contains all test results and provides convenient access methods.
+
+### Properties
+
+#### `.score`
+
+Overall robustness score (0-1, higher is better).
+
+```python
+score = report.score  # e.g., 0.847
+print(f"Robustness: {score:.1%}")  # "Robustness: 84.7%"
+```
+
+**Interpretation:**
+- **> 0.80** - Excellent robustness
+- **0.60-0.80** - Good robustness
+- **0.40-0.60** - Moderate robustness issues
+- **< 0.40** - Poor robustness
+
+#### `.failures`
+
+List of failure cases found during testing.
+
+```python
+failures = report.failures
+print(f"Found {len(failures)} failures")
+
+for failure in failures[:5]:
+    print(f"Sample {failure['index']}: {failure['original_pred']} → {failure['perturbed_pred']}")
+    print(f"  Strategy: {failure['strategy']}, Level: {failure['level']:.3f}")
+```
+
+**Failure Dict Structure:**
+```python
+{
+    'index': int,              # Sample index in dataset
+    'original_pred': int,      # Original predicted class
+    'perturbed_pred': int,     # Prediction after perturbation
+    'strategy': str,           # Strategy that caused failure
+    'level': float,            # Perturbation level
+    'original_image': Tensor,  # Original image
+    'perturbed_image': Tensor  # Perturbed image
+}
+```
+
+#### `.summary`
+
+Dictionary with key metrics.
+
+```python
+summary = report.summary
+print(summary)
+```
+
+**Keys:**
+- `overall_robustness_score`: Float (0-1)
+- `total_samples`: Int
+- `passed_samples`: Int
+- `failed_samples`: Int
+- `num_strategies`: Int
+- `runtime_sec`: Float
+- `model_queries`: Int
+- `preset_used`: Str
+
+### Methods
+
+#### `.show(mode=None)`
+
+Display results in a context-appropriate way.
+
+```python
+# In Jupyter: Shows rich HTML
+report.show()
+
+# In interactive Python: Shows colored text
+report.show()
+
+# Force specific mode
+report.show(mode="html")    # Force HTML
+report.show(mode="text")    # Force plain text
+```
+
+**Auto-detection:**
+- Jupyter notebook → Rich HTML with charts
+- Interactive terminal → Colored text output
+- Script/non-interactive → Plain text
+
+#### `.export_failures(n=10, output_dir=None)`
+
+Export the worst failure cases as a dataset for retraining.
+
+```python
+# Export top 10 failures
+path = report.export_failures(n=10)
+print(f"Exported to: {path}")
+
+# Custom output directory
+path = report.export_failures(n=20, output_dir="./hard_examples")
+```
+
+**Returns:** Path to the exported dataset directory
+
+**Output Structure:**
+```
+visprobe_results/failures_export/
+├── manifest.json          # Metadata about failures
+├── 0_original.png        # Original image
+├── 0_perturbed.png       # Perturbed version
+├── 1_original.png
+├── 1_perturbed.png
+└── ...
+```
+
+**Usage in Training:**
+```python
+# Load exported failures
+import json
+with open('visprobe_results/failures_export/manifest.json') as f:
+    failures = json.load(f)
+
+# Add to training set
+for failure in failures:
+    training_dataset.add_hard_example(
+        image_path=failure['perturbed_image_path'],
+        label=failure['original_label']
+    )
+```
+
+#### `.save(path=None)`
+
+Save the full report to disk.
+
+```python
+# Save to default location
+report.save()
+
+# Save to custom path
+report.save("my_experiment_results.json")
+```
+
+---
+
+## Presets
+
+Presets are curated bundles of perturbation strategies with validated parameter ranges.
+
+### Available Presets
+
+#### "standard"
+
+Balanced mix for general-purpose robustness testing.
+
+**Strategies:**
+- Brightness (0.6-1.4x)
+- Gaussian blur (σ: 0-2.5)
+- Gaussian noise (std: 0-0.05)
+- JPEG compression (quality: 10-100)
+- **Compositional perturbations:**
+  - Low-light + blur
+  - Compression + noise
+
+**Best for:** Production models, general robustness testing
 
 **Example:**
 ```python
-@given(strategy=FGSMStrategy(eps=0.03))
-@model(my_model)
-@data_source(data_obj=my_data, collate_fn=my_collate_fn)
-def test_adversarial_robustness(original, perturbed):
-    assert LabelConstant.evaluate(original, perturbed)
+report = quick_check(model, data, preset="standard")
 ```
 
-### @search
+#### "lighting"
 
-Defines an adaptive search test to find failure thresholds.
+Tests robustness to lighting variations.
 
-```python
-@search(
-    strategy: Callable[[float], Strategy] | Strategy,
-    initial_level: float,
-    step: float,
-    min_step: float = 1e-5,
-    max_queries: int = 500,
-    resolutions: Optional[List[Tuple[int, int]]] = None,
-    noise_sweep: Optional[Dict[str, Any]] = None,
-    top_k: Optional[int] = 5,
-    reduce: Optional[str] = 'all',
-    property_name: Optional[str] = None
-)
-```
+**Strategies:**
+- Brightness (0.5-1.5x)
+- Contrast (0.7-1.3x)
+- Gamma correction (0.7-1.3)
+- **Compositional:** Dim low-contrast
 
-**Parameters:**
-- `strategy`: Strategy factory function or fixed strategy
-- `initial_level`: Starting perturbation level
-- `step`: Initial step size for search
-- `min_step`: Minimum step size (search stops when reached)
-- `max_queries`: Maximum model queries allowed
-- `reduce`: How to aggregate results ('all', 'any', 'mean')
+**Best for:** Outdoor cameras, variable lighting conditions
 
 **Example:**
 ```python
-@search(
-    strategy=lambda level: FGSMStrategy(eps=level),
-    initial_level=0.01,
-    step=0.005,
-    max_queries=100
-)
-@model(my_model)
-@data_source(data_obj=my_data, collate_fn=my_collate_fn)
-def find_failure_threshold(original, perturbed):
-    return LabelConstant.evaluate(original, perturbed)
+report = quick_check(model, data, preset="lighting")
 ```
 
-### @model
+#### "blur"
 
-Attaches a model to a test function.
+Tests robustness to blur and compression.
+
+**Strategies:**
+- Gaussian blur (σ: 0-3.0)
+- Motion blur (kernel: 1-25 pixels)
+- JPEG compression (quality: 10-100)
+
+**Best for:** Video frames, compressed images, motion handling
+
+**Example:**
+```python
+report = quick_check(model, data, preset="blur")
+```
+
+#### "corruption"
+
+Tests robustness to noise and degradation.
+
+**Strategies:**
+- Gaussian noise (std: 0-0.08)
+- JPEG compression (quality: 5-100)
+- **Compositional:** Compression + noise
+
+**Best for:** Low-quality inputs, sensor noise, transmission errors
+
+**Example:**
+```python
+report = quick_check(model, data, preset="corruption")
+```
+
+### Listing Presets Programmatically
 
 ```python
-@model(
-    model_obj: Any,
-    capture_intermediate_layers: Optional[List[str]] = None
-)
+from visprobe import presets
+
+# List all available presets
+for name, description in presets.list_presets():
+    print(f"{name}: {description}")
+
+# Get preset details
+preset_config = presets.get_preset("standard")
+print(preset_config['name'])
+print(preset_config['description'])
+print(preset_config['strategies'])
 ```
 
-**Parameters:**
-- `model_obj`: The PyTorch model to test
-- `capture_intermediate_layers`: List of layer names to capture for analysis
+---
 
-### @data_source
+## Strategies
 
-Provides data configuration for a test.
-
-```python
-@data_source(
-    data_obj: Any,
-    collate_fn: Optional[Callable[[Any], Any]] = None,
-    class_names: Optional[List[str]] = None,
-    mean: Optional[List[float]] = None,
-    std: Optional[List[float]] = None
-)
-```
-
-**Parameters:**
-- `data_obj`: Dataset or list of samples
-- `collate_fn`: Function to batch samples
-- `class_names`: List of class names for visualization
-- `mean`: Normalization mean (defaults to ImageNet)
-- `std`: Normalization standard deviation (defaults to ImageNet)
-
-## Perturbation Strategies
-
-### Adversarial Strategies
-
-#### FGSMStrategy
-Fast Gradient Sign Method attack.
-
-```python
-FGSMStrategy(
-    eps: float = 2/255,
-    targeted: bool = False,
-    art_attack_kwargs: dict = None
-)
-```
-
-#### PGDStrategy
-Projected Gradient Descent attack.
-
-```python
-PGDStrategy(
-    eps: float,
-    eps_step: float | None = None,
-    max_iter: int = 100,
-    **kwargs
-)
-```
-
-#### BIMStrategy
-Basic Iterative Method (iterated FGSM).
-
-```python
-BIMStrategy(
-    eps: float,
-    eps_step: float | None = None,
-    max_iter: int = 10,
-    **kwargs
-)
-```
-
-#### APGDStrategy
-Auto-Projected Gradient Descent.
-
-```python
-APGDStrategy(
-    eps: float,
-    max_iter: int = 100,
-    **kwargs
-)
-```
-
-#### SquareAttackStrategy
-Score-based Square Attack.
-
-```python
-SquareAttackStrategy(
-    eps: float,
-    max_iter: int = 5000,
-    **kwargs
-)
-```
+Strategies define how images are perturbed. While presets bundle strategies together, you can also use individual strategies for custom testing.
 
 ### Natural Perturbation Strategies
 
-#### GaussianNoiseStrategy
-Additive Gaussian noise.
-
-```python
-GaussianNoiseStrategy(
-    std_dev: float,
-    mean: Optional[Tuple[float, float, float]] = None,
-    std: Optional[Tuple[float, float, float]] = None,
-    seed: Optional[int] = None
-)
-```
-
 #### BrightnessStrategy
-Brightness adjustment.
+
+Adjusts image brightness.
 
 ```python
-BrightnessStrategy(brightness_factor: float)
+from visprobe.strategies.image import BrightnessStrategy
+
+strategy = BrightnessStrategy(brightness_factor=1.2)
 ```
 
-#### RotateStrategy
-Image rotation.
+**Parameters:**
+- `brightness_factor` (float): Brightness multiplier
+  - < 1.0: Darker
+  - = 1.0: No change
+  - > 1.0: Brighter
+
+#### ContrastStrategy
+
+Adjusts image contrast.
 
 ```python
-RotateStrategy(angle: float)
+from visprobe.strategies.image import ContrastStrategy
+
+strategy = ContrastStrategy(contrast_factor=1.3)
 ```
 
-## Robustness Properties
+**Parameters:**
+- `contrast_factor` (float): Contrast multiplier
+  - < 1.0: Lower contrast
+  - = 1.0: No change
+  - > 1.0: Higher contrast
+
+#### GammaStrategy
+
+Applies gamma correction.
+
+```python
+from visprobe.strategies.image import GammaStrategy
+
+strategy = GammaStrategy(gamma=1.2, gain=1.0)
+```
+
+**Parameters:**
+- `gamma` (float): Gamma value
+  - < 1.0: Brighten
+  - = 1.0: No change
+  - > 1.0: Darken
+- `gain` (float, default=1.0): Gain multiplier
+
+#### GaussianBlurStrategy
+
+Applies Gaussian blur.
+
+```python
+from visprobe.strategies.image import GaussianBlurStrategy
+
+strategy = GaussianBlurStrategy(kernel_size=5, sigma=2.0)
+```
+
+**Parameters:**
+- `kernel_size` (int or tuple): Blur kernel size (must be odd)
+- `sigma` (float or tuple): Standard deviation
+  - Higher sigma = more blur
+
+#### MotionBlurStrategy
+
+Simulates motion blur.
+
+```python
+from visprobe.strategies.image import MotionBlurStrategy
+
+strategy = MotionBlurStrategy(kernel_size=15, angle=45.0)
+```
+
+**Parameters:**
+- `kernel_size` (int): Size of motion blur kernel
+- `angle` (float): Direction of motion in degrees
+
+#### JPEGCompressionStrategy
+
+Simulates JPEG compression artifacts.
+
+```python
+from visprobe.strategies.image import JPEGCompressionStrategy
+
+strategy = JPEGCompressionStrategy(quality=75)
+```
+
+**Parameters:**
+- `quality` (int): JPEG quality (1-100)
+  - Lower = more artifacts
+
+#### GaussianNoiseStrategy
+
+Adds Gaussian noise.
+
+```python
+from visprobe.strategies.image import GaussianNoiseStrategy
+
+strategy = GaussianNoiseStrategy(std_dev=0.05, seed=42)
+```
+
+**Parameters:**
+- `std_dev` (float): Standard deviation of noise
+- `mean`, `std` (optional): Denormalization parameters
+- `seed` (optional): Random seed for reproducibility
+
+---
+
+## Properties
+
+Properties define what constitutes a "failure". The default property used by `quick_check()` is `LabelConstant`, which checks if the predicted class changes.
 
 ### LabelConstant
-Ensures the top-1 prediction remains unchanged.
+
+Checks if the top-1 prediction remains the same.
 
 ```python
-# Usage in test function
-assert LabelConstant.evaluate(original, perturbed)
+from visprobe.properties import LabelConstant
 
-# Or create instance
 prop = LabelConstant()
-assert prop(original, perturbed)
+passed = prop(original_logits, perturbed_logits)
 ```
+
+**Returns:** `True` if top-1 prediction is unchanged, `False` otherwise.
 
 ### TopKStability
-Checks stability of top-k predictions with multiple modes.
+
+Checks stability of top-k predictions.
 
 ```python
-TopKStability(
-    k: int = 5,
-    mode: Literal["overlap", "containment", "jaccard"] = "overlap",
-    min_overlap: int = 3,
-    require_containment: bool = True,
-    min_jaccard: float = 0.4
-)
+from visprobe.properties import TopKStability
+
+# Overlap mode: At least 3 common classes in top-5
+prop = TopKStability(k=5, mode="overlap", min_overlap=3)
+
+# Containment mode: Original top-1 must be in perturbed top-k
+prop = TopKStability(k=5, mode="containment")
+
+# Jaccard mode: Jaccard similarity ≥ 0.4
+prop = TopKStability(k=5, mode="jaccard", min_jaccard=0.4)
 ```
 
-**Modes:**
-- `overlap`: Require at least `min_overlap` common classes in top-k sets
-- `containment`: Original top-1 must be in perturbed top-k
-- `jaccard`: Jaccard index between sets must be ≥ `min_jaccard`
-
 ### ConfidenceDrop
-Limits confidence decrease in top prediction.
+
+Limits the allowed confidence decrease.
 
 ```python
-ConfidenceDrop(max_drop: float = 0.3)
+from visprobe.properties import ConfidenceDrop
+
+# Allow max 30% confidence drop
+prop = ConfidenceDrop(max_drop=0.3)
 ```
 
 ### L2Distance
-Constrains L2 distance between output logits.
+
+Constrains L2 distance between logits.
 
 ```python
-L2Distance(max_delta: float = 1.0)
+from visprobe.properties import L2Distance
+
+# Max L2 distance of 1.0
+prop = L2Distance(max_delta=1.0)
 ```
 
-## Data Handling
-
-### Built-in Utilities
-
-```python
-from visprobe.api.utils import cifar10_data_source
-
-# Create CIFAR-10 data source
-data_obj, collate_fn, class_names, mean, std = cifar10_data_source(
-    dataset_or_subset,
-    normalized=True,
-    meta_path='./data/cifar-10-batches-py/batches.meta'
-)
-```
-
-### Custom Data Sources
-
-```python
-# For custom datasets
-my_data = [img1, img2, img3, ...]  # List of tensors
-
-def my_collate_fn(batch_list):
-    return torch.stack(batch_list, dim=0)
-
-@data_source(
-    data_obj=my_data,
-    collate_fn=my_collate_fn,
-    class_names=['class1', 'class2', ...],
-    mean=[0.485, 0.456, 0.406],  # Custom normalization
-    std=[0.229, 0.224, 0.225]
-)
-```
-
-## Configuration
-
-### Device Management
-
-For automatic device configuration:
-
-```python
-import visprobe.auto_init  # Add at top of test files
-```
-
-Or manual configuration:
-
-```python
-import os
-os.environ["VISPROBE_DEVICE"] = "cpu"  # or "cuda", "mps"
-os.environ["VISPROBE_PREFER_GPU"] = "1"  # Enable GPU preference
-```
-
-### Environment Variables
-
-- `VISPROBE_DEVICE`: Force specific device (cpu, cuda, mps)
-- `VISPROBE_PREFER_GPU`: Enable GPU preference if available
-- `VF_THREADS`: Number of PyTorch threads
-- `OMP_NUM_THREADS`: OpenMP threads
-- `VISPROBE_DEBUG`: Enable debug output
+---
 
 ## Advanced Usage
 
-### Multiple Properties
+### Custom Normalization
 
-Test multiple properties simultaneously:
-
-```python
-@given(strategy=FGSMStrategy(eps=0.03))
-@model(my_model)
-@data_source(data_obj=my_data, collate_fn=my_collate_fn)
-def test_comprehensive_robustness(original, perturbed):
-    # All must pass
-    assert LabelConstant.evaluate(original, perturbed)
-    assert ConfidenceDrop.evaluate(original, perturbed, max_drop=0.3)
-    assert TopKStability.evaluate(original, perturbed, k=5, min_overlap=3)
-```
-
-### Composite Strategies
-
-Apply multiple perturbations sequentially:
+If your model was trained with specific normalization:
 
 ```python
-composite_strategy = [
-    GaussianNoiseStrategy(std_dev=0.01),
-    BrightnessStrategy(brightness_factor=1.1)
-]
-
-@given(strategy=composite_strategy)
-@model(my_model)
-@data_source(data_obj=my_data, collate_fn=my_collate_fn)
-def test_multiple_perturbations(original, perturbed):
-    assert LabelConstant.evaluate(original, perturbed)
+# ImageNet normalization
+report = quick_check(
+    model,
+    data,
+    preset="standard",
+    mean=(0.485, 0.456, 0.406),
+    std=(0.229, 0.224, 0.225)
+)
 ```
 
-### Custom Properties
+### Multiple Presets
 
-Create custom robustness properties:
+Compare your model across all presets:
 
 ```python
-from visprobe.properties.base import Property
+results = {}
+for preset_name in ["standard", "lighting", "blur", "corruption"]:
+    report = quick_check(model, data, preset=preset_name, budget=500)
+    results[preset_name] = report.score
 
-class CustomProperty(Property):
-    def __init__(self, threshold: float = 0.5):
-        self.threshold = threshold
-
-    def __call__(self, original: Any, perturbed: Any) -> bool:
-        # Your custom logic here
-        return custom_check(original, perturbed, self.threshold)
-
-    def __str__(self) -> str:
-        return f"CustomProperty(threshold={self.threshold})"
-
-# Usage
-@given(strategy=GaussianNoiseStrategy(std_dev=0.05))
-@model(my_model)
-@data_source(data_obj=my_data, collate_fn=my_collate_fn)
-def test_custom_property(original, perturbed):
-    assert CustomProperty.evaluate(original, perturbed, threshold=0.7)
+# Find weakest area
+weakest = min(results.items(), key=lambda x: x[1])
+print(f"Weakest area: {weakest[0]} (score: {weakest[1]:.1%})")
 ```
 
-### Intermediate Layer Analysis
+### Production CI/CD Integration
 
-Capture and analyze intermediate layer activations:
+Use VisProbe in automated testing:
 
 ```python
-@given(strategy=FGSMStrategy(eps=0.03))
-@model(my_model, capture_intermediate_layers=['layer1', 'layer2', 'layer3'])
-@data_source(data_obj=my_data, collate_fn=my_collate_fn)
-def test_with_layer_analysis(original, perturbed):
-    # original["features"] and perturbed["features"] contain layer activations
-    assert LabelConstant.evaluate(original, perturbed)
+# test_model_robustness.py
+import torch
+from visprobe import quick_check
+from my_project import load_model, get_test_data
+
+def test_production_robustness():
+    """Ensure model meets robustness requirements."""
+    model = load_model("production_checkpoint.pth")
+    test_data = get_test_data(num_samples=100)
+
+    report = quick_check(
+        model,
+        test_data,
+        preset="standard",
+        budget=1000,
+        device="cuda"
+    )
+
+    # Enforce minimum robustness score
+    assert report.score > 0.70, \
+        f"Model robustness too low: {report.score:.1%} (required: >70%)"
+
+    # Save report for tracking
+    report.save(f"robustness_report_{datetime.now()}.json")
+
+    return report
+
+if __name__ == "__main__":
+    test_production_robustness()
 ```
 
-## CLI Usage
-
-### Running Tests
-
-```bash
-# Run tests and save results
-visprobe run test_my_model.py
-
-# Run with specific device
-visprobe run test_my_model.py --device cuda
-
-# Keep previous results
-visprobe run test_my_model.py --keep
-```
-
-### Visualization
-
-```bash
-# Launch interactive dashboard
-visprobe visualize test_my_model.py
-
-# Automatically runs test if no results found
-visprobe visualize test_my_model.py --device cpu
-```
-
-## Error Handling
-
-### Common Issues
-
-1. **Device Mismatch**: Use `import visprobe.auto_init` or set `VISPROBE_DEVICE=cpu`
-2. **Memory Issues**: Reduce batch size or use `vectorized=False`
-3. **Missing Dependencies**: Install with `pip install adversarial-robustness-toolbox`
-
-### Debugging
+### Custom Test Data
 
 ```python
-import os
-os.environ["VISPROBE_DEBUG"] = "1"  # Enable debug output
+from torch.utils.data import DataLoader, TensorDataset
+
+# From DataLoader
+loader = DataLoader(my_dataset, batch_size=32)
+report = quick_check(model, loader, preset="standard")
+
+# From TensorDataset
+dataset = TensorDataset(images_tensor, labels_tensor)
+report = quick_check(model, dataset, preset="standard")
+
+# From raw tensors
+images = torch.randn(100, 3, 224, 224)
+labels = torch.randint(0, 1000, (100,))
+report = quick_check(model, (images, labels), preset="standard")
 ```
+
+### Analyzing Failure Patterns
+
+```python
+report = quick_check(model, data, preset="standard")
+
+# Group failures by strategy
+from collections import defaultdict
+by_strategy = defaultdict(list)
+for failure in report.failures:
+    by_strategy[failure['strategy']].append(failure)
+
+# Find most problematic strategy
+for strategy, failures in by_strategy.items():
+    print(f"{strategy}: {len(failures)} failures")
+    avg_level = sum(f['level'] for f in failures) / len(failures)
+    print(f"  Average failure level: {avg_level:.3f}")
+```
+
+---
 
 ## Best Practices
 
-1. **Always use `import visprobe.auto_init`** for stable device management
-2. **Start with small datasets** for testing
-3. **Use appropriate perturbation levels** for your domain
-4. **Test multiple properties** for comprehensive evaluation
-5. **Document your test intentions** with clear function names and comments
-6. **Use version control** for reproducible experiments
+1. **Start with small budget for quick iteration**
+   ```python
+   # Quick test during development
+   report = quick_check(model, data[:10], preset="standard", budget=100)
+   ```
 
-## Integration Examples
+2. **Use appropriate preset for your domain**
+   - Outdoor cameras → "lighting"
+   - Video processing → "blur"
+   - Low-quality inputs → "corruption"
+   - General purpose → "standard"
 
-### Research Pipeline
+3. **Set normalization to match training**
+   ```python
+   report = quick_check(
+       model, data, preset="standard",
+       mean=YOUR_TRAINING_MEAN,
+       std=YOUR_TRAINING_STD
+   )
+   ```
 
-```python
-import visprobe.auto_init
-from visprobe import given, model, data_source
-from visprobe.strategies import FGSMStrategy, PGDStrategy
-from visprobe.properties import LabelConstant, ConfidenceDrop
+4. **Monitor robustness in CI/CD**
+   ```python
+   assert report.score > MINIMUM_THRESHOLD
+   ```
 
-# Load your model and data
-my_model = load_pretrained_model()
-my_data = load_test_dataset()
+5. **Export and retrain on failures**
+   ```python
+   if report.score < 0.80:
+       report.export_failures(n=50)
+       # Add to training set and retrain
+   ```
 
-@given(strategy=FGSMStrategy(eps=0.031))
-@model(my_model)
-@data_source(data_obj=my_data, collate_fn=default_collate)
-def test_fgsm_robustness(original, perturbed):
-    """Test robustness against FGSM attacks."""
-    return (LabelConstant.evaluate(original, perturbed) and
-            ConfidenceDrop.evaluate(original, perturbed, max_drop=0.5))
+6. **Track robustness over time**
+   ```python
+   report.save(f"robustness_{model_version}.json")
+   # Compare with previous versions
+   ```
 
-@given(strategy=PGDStrategy(eps=0.031, eps_step=0.007, max_iter=40))
-@model(my_model)
-@data_source(data_obj=my_data, collate_fn=default_collate)
-def test_pgd_robustness(original, perturbed):
-    """Test robustness against stronger PGD attacks."""
-    return LabelConstant.evaluate(original, perturbed)
+---
 
-if __name__ == "__main__":
-    # Run all tests
-    test_fgsm_robustness()
-    test_pgd_robustness()
+## Environment Variables
+
+- `VISPROBE_DEVICE`: Force specific device (cpu, cuda, mps)
+- `VISPROBE_DEBUG`: Enable debug output
+
+Example:
+```bash
+export VISPROBE_DEVICE=cpu
+python test_my_model.py
 ```
 
-### Production Monitoring
+---
 
-```python
-import visprobe.auto_init
-from visprobe import given, model, data_source
-from visprobe.strategies import GaussianNoiseStrategy
-from visprobe.properties import ConfidenceDrop, TopKStability
+## Getting Help
 
-@given(strategy=GaussianNoiseStrategy(std_dev=0.02))
-@model(production_model)
-@data_source(data_obj=validation_samples, collate_fn=production_collate)
-def monitor_noise_robustness(original, perturbed):
-    """Monitor model robustness to natural noise in production."""
-    return (ConfidenceDrop.evaluate(original, perturbed, max_drop=0.2) and
-            TopKStability.evaluate(original, perturbed, k=3, min_overlap=2))
+- **Documentation**: See [README.md](README.md)
+- **Examples**: See [examples/](examples/)
+- **Troubleshooting**: See [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+- **Issues**: Report bugs on GitHub
 
-# Integrate into monitoring pipeline
-def daily_robustness_check():
-    report = monitor_noise_robustness()
-    if report.robust_accuracy < 0.95:  # Alert threshold
-        send_alert(f"Robustness dropped to {report.robust_accuracy:.2%}")
-    return report
-```
+---
 
-This comprehensive reference covers all major aspects of the VisProbe API. For additional examples and use cases, see the test files in the repository.
-
+This API reference covers all public interfaces in VisProbe. For implementation details, see the source code.

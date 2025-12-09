@@ -17,7 +17,9 @@
       "Bash(chmod:*)",
       "Bash(source venv/bin/activate)",
       "Bash(mkdocs serve:*)",
-      "Bash(visprobe-auto-docs:*)"
+      "Bash(visprobe-auto-docs:*)",
+      "WebFetch(domain:claude.ai)",
+      "Bash(mkdir:*)"
     ],
     "deny": [],
     "ask": []

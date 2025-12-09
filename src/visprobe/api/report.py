@@ -289,3 +289,204 @@ class Report:
             }
 
         return data
+
+    # ===== User-friendly API for quick_check() =====
+
+    @property
+    def score(self) -> Optional[float]:
+        """
+        Overall robustness score (0-1, higher is better).
+
+        For quick_check tests, returns the average robustness score across all strategies.
+        For given/search tests, returns robust_accuracy if available.
+
+        Returns:
+            Float between 0 and 1, or None if not applicable
+        """
+        # For quick_check tests
+        if self.test_type == "quick_check" and self.metrics:
+            return self.metrics.get("overall_robustness_score")
+
+        # For traditional tests
+        return self.robust_accuracy
+
+    @property
+    def failures(self) -> List[Dict[str, Any]]:
+        """
+        List of failure cases found during testing.
+
+        Returns:
+            List of dictionaries containing failure information
+        """
+        if self.search and isinstance(self.search, dict):
+            results = self.search.get("results", [])
+            all_failures = []
+            for result in results:
+                if "failures" in result:
+                    all_failures.extend(result["failures"])
+            return all_failures
+        return []
+
+    @property
+    def summary(self) -> Dict[str, Any]:
+        """
+        Key metrics summary dictionary.
+
+        Returns:
+            Dictionary with test_name, score, failures, runtime, queries
+        """
+        return {
+            "test_name": self.test_name,
+            "test_type": self.test_type,
+            "score": self.score,
+            "total_failures": len(self.failures),
+            "runtime_sec": self.runtime,
+            "model_queries": self.model_queries,
+            "total_samples": self.total_samples,
+            "passed_samples": self.passed_samples,
+        }
+
+    def show(self, mode: Optional[str] = None) -> None:
+        """
+        Display the report in a context-appropriate way.
+
+        Automatically detects the environment:
+        - Jupyter: Inline HTML display
+        - Interactive Python: Print formatted summary
+        - Script: Print concise summary
+
+        Args:
+            mode: Force a specific mode ("jupyter", "interactive", "text", or None for auto)
+        """
+        # Auto-detect mode if not specified
+        if mode is None:
+            try:
+                # Check if we're in Jupyter
+                get_ipython  # type: ignore # noqa: F821
+                mode = "jupyter"
+            except NameError:
+                # Check if we're in interactive mode
+                import sys
+                if hasattr(sys, "ps1"):
+                    mode = "interactive"
+                else:
+                    mode = "text"
+
+        if mode == "jupyter":
+            self._show_jupyter()
+        elif mode == "interactive":
+            self._show_interactive()
+        else:
+            self._show_text()
+
+    def _show_text(self) -> None:
+        """Print concise text summary."""
+        print("\n" + "=" * 60)
+        print(f"VisProbe Report: {self.test_name}")
+        print("=" * 60)
+        print(f"Test type: {self.test_type}")
+        if self.score is not None:
+            print(f"Robustness score: {self.score:.2%}")
+        print(f"Failures found: {len(self.failures)}")
+        print(f"Total samples: {self.total_samples}")
+        print(f"Passed samples: {self.passed_samples}")
+        print(f"Runtime: {self.runtime:.1f}s")
+        print(f"Model queries: {self.model_queries}")
+
+        # Show per-strategy results if available
+        if self.search and isinstance(self.search, dict):
+            results = self.search.get("results", [])
+            if results:
+                print("\n" + "-" * 60)
+                print("Per-Strategy Results:")
+                print("-" * 60)
+                for result in results:
+                    strategy_name = result.get("strategy", "Unknown")
+                    score = result.get("robustness_score", 0)
+                    threshold = result.get("failure_threshold", 0)
+                    print(f"  {strategy_name:30s} Score: {score:.2%}  Threshold: {threshold:.3f}")
+
+        print("=" * 60 + "\n")
+
+    def _show_interactive(self) -> None:
+        """Print detailed interactive summary."""
+        self._show_text()  # Use same as text for now
+        print("💡 Tip: Use report.summary for a dict, or report.save() to save results")
+
+    def _show_jupyter(self) -> None:
+        """Display rich HTML in Jupyter notebook."""
+        try:
+            from IPython.display import HTML, display
+
+            html = self._generate_html_summary()
+            display(HTML(html))
+        except ImportError:
+            # Fallback to text if IPython not available
+            self._show_text()
+
+    def _generate_html_summary(self) -> str:
+        """Generate HTML summary for Jupyter display."""
+        score_pct = self.score * 100 if self.score else 0
+        score_color = "#4CAF50" if score_pct > 70 else "#FF9800" if score_pct > 40 else "#F44336"
+
+        html = f"""
+        <div style="border: 2px solid #ddd; padding: 20px; border-radius: 5px; font-family: Arial, sans-serif;">
+            <h2 style="margin-top: 0;">VisProbe Report: {self.test_name}</h2>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div>
+                    <h3 style="color: {score_color};">Robustness Score: {score_pct:.1f}%</h3>
+                    <p><strong>Test Type:</strong> {self.test_type}</p>
+                    <p><strong>Total Samples:</strong> {self.total_samples}</p>
+                    <p><strong>Passed:</strong> {self.passed_samples}</p>
+                </div>
+                <div>
+                    <p><strong>Failures Found:</strong> {len(self.failures)}</p>
+                    <p><strong>Runtime:</strong> {self.runtime:.1f}s</p>
+                    <p><strong>Model Queries:</strong> {self.model_queries}</p>
+                </div>
+            </div>
+        """
+
+        # Add per-strategy results if available
+        if self.search and isinstance(self.search, dict):
+            results = self.search.get("results", [])
+            if results:
+                html += "<h3>Per-Strategy Results</h3><table style='width:100%; border-collapse: collapse;'>"
+                html += "<tr style='background-color: #f0f0f0;'><th style='padding: 8px; text-align: left;'>Strategy</th><th style='padding: 8px;'>Score</th><th style='padding: 8px;'>Threshold</th></tr>"
+                for result in results:
+                    strategy = result.get("strategy", "Unknown")
+                    score = result.get("robustness_score", 0) * 100
+                    threshold = result.get("failure_threshold", 0)
+                    html += f"<tr><td style='padding: 8px;'>{strategy}</td><td style='padding: 8px; text-align: center;'>{score:.1f}%</td><td style='padding: 8px; text-align: center;'>{threshold:.3f}</td></tr>"
+                html += "</table>"
+
+        html += "</div>"
+        return html
+
+    def export_failures(self, n: int = 10, output_dir: Optional[str] = None) -> str:
+        """
+        Export the top N failure cases as a dataset.
+
+        Args:
+            n: Number of failures to export (default: 10)
+            output_dir: Directory to save failures (default: visprobe_results/failures)
+
+        Returns:
+            Path to the exported directory
+        """
+        if output_dir is None:
+            output_dir = os.path.join(get_results_dir(), "failures", self.test_name)
+
+        os.makedirs(output_dir, exist_ok=True)
+
+        failures_to_export = self.failures[:n]
+
+        # Save failures metadata
+        metadata_path = os.path.join(output_dir, "failures.json")
+        with open(metadata_path, "w") as f:
+            json.dump(failures_to_export, f, indent=2, cls=NumpyEncoder)
+
+        print(f"✅ Exported {len(failures_to_export)} failures to {output_dir}")
+        print(f"   Metadata: {metadata_path}")
+
+        return output_dir

@@ -41,13 +41,28 @@ class Strategy:
             params: Dict[str, Any] = {k: v for k, v in perturb_spec.items() if k != "type"}
 
             # Lazy import to avoid circular dependencies
-            if spec_type in {"gaussian_noise", "brightness", "rotate"}:
-                from .image import BrightnessStrategy, GaussianNoiseStrategy, RotateStrategy
+            if spec_type in {"gaussian_noise", "brightness", "contrast", "rotate", "gamma",
+                            "gaussian_blur", "motion_blur", "jpeg_compression"}:
+                from .image import (
+                    BrightnessStrategy,
+                    ContrastStrategy,
+                    GammaStrategy,
+                    GaussianBlurStrategy,
+                    GaussianNoiseStrategy,
+                    JPEGCompressionStrategy,
+                    MotionBlurStrategy,
+                    RotateStrategy,
+                )
 
                 mapping: Dict[str, Callable[..., Strategy]] = {
                     "gaussian_noise": GaussianNoiseStrategy,
                     "brightness": BrightnessStrategy,
+                    "contrast": ContrastStrategy,
                     "rotate": RotateStrategy,
+                    "gamma": GammaStrategy,
+                    "gaussian_blur": GaussianBlurStrategy,
+                    "motion_blur": MotionBlurStrategy,
+                    "jpeg_compression": JPEGCompressionStrategy,
                 }
                 return mapping[spec_type](**params)
             if spec_type in {"fgsm", "pgd", "bim", "apgd", "square"}:
