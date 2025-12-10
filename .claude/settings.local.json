@@ -19,7 +19,8 @@
       "Bash(mkdocs serve:*)",
       "Bash(visprobe-auto-docs:*)",
       "WebFetch(domain:claude.ai)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(mkdocs build:*)"
     ],
     "deny": [],
     "ask": []

@@ -38,7 +38,6 @@ PRESETS: Dict[str, Dict[str, Any]] = {
         ],
         "property": "label_constant",
         "search_budget": 2000,
-        "validated": True,
         "use_cases": [
             "General robustness testing",
             "Pre-deployment validation",
@@ -62,7 +61,6 @@ PRESETS: Dict[str, Dict[str, Any]] = {
         ],
         "property": "label_constant",
         "search_budget": 1000,
-        "validated": True,
         "use_cases": [
             "Outdoor cameras (varying daylight)",
             "Time-of-day robustness",
@@ -86,7 +84,6 @@ PRESETS: Dict[str, Dict[str, Any]] = {
         ],
         "property": "label_constant",
         "search_budget": 1200,
-        "validated": True,
         "use_cases": [
             "Motion/camera shake",
             "Out-of-focus images",
@@ -110,7 +107,6 @@ PRESETS: Dict[str, Dict[str, Any]] = {
         ],
         "property": "label_constant",
         "search_budget": 1200,
-        "validated": True,
         "use_cases": [
             "Lossy transmission",
             "Low-bandwidth scenarios",

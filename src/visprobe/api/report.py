@@ -6,18 +6,22 @@ from __future__ import annotations
 
 import base64
 import csv
+import html as html_module
 import io
 import json
 import os
 import re
+import sys
 import tempfile
+import webbrowser
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Union
 
 import torch
 import torchvision.transforms as T
 
-__all__ = ["ImageData", "Report", "PerturbationInfo"]
+__all__ = ["ImageData", "Report", "PerturbationInfo", "Failure"]
 
 
 def _sanitize_filename(name: str) -> str:
@@ -59,6 +63,88 @@ def get_results_dir() -> str:
     if env_dir:
         return os.path.abspath(env_dir)
     return os.path.join(tempfile.gettempdir(), "visprobe_results")
+
+
+def _detect_environment() -> str:
+    """
+    Detect the current execution environment.
+
+    Returns:
+        One of: "jupyter", "interactive", "script"
+    """
+    # Check for Jupyter/IPython
+    try:
+        from IPython import get_ipython
+        ipython = get_ipython()
+        if ipython is not None:
+            if "IPKernelApp" in ipython.config:
+                return "jupyter"
+            elif "TerminalInteractiveShell" in str(type(ipython)):
+                return "interactive"
+    except (ImportError, AttributeError):
+        pass
+
+    # Check for interactive Python session
+    if hasattr(sys, "ps1"):
+        return "interactive"
+
+    # Check if stdin is a tty (interactive terminal)
+    try:
+        if sys.stdin.isatty() and sys.__stdin__.isatty():
+            return "interactive"
+    except (AttributeError, ValueError):
+        pass
+
+    return "script"
+
+
+@dataclass
+class Failure:
+    """
+    Represents a single failure case from robustness testing.
+
+    Attributes:
+        image_index: Index of the image in the test dataset
+        original_prediction: Model's prediction on original image
+        perturbed_prediction: Model's prediction on perturbed image
+        perturbation_name: Name of the perturbation strategy
+        perturbation_strength: Strength/intensity of the perturbation
+        perturbation_params: Additional perturbation parameters
+        confidence_drop: Drop in prediction confidence
+        original_confidence: Confidence on original image
+        perturbed_confidence: Confidence on perturbed image
+        original_tensor: Original image tensor (optional, for export)
+        perturbed_tensor: Perturbed image tensor (optional, for export)
+    """
+    image_index: int
+    original_prediction: Union[str, int]
+    perturbed_prediction: Union[str, int]
+    perturbation_name: str
+    perturbation_strength: float
+    perturbation_params: Dict[str, Any] = field(default_factory=dict)
+    confidence_drop: float = 0.0
+    original_confidence: float = 0.0
+    perturbed_confidence: float = 0.0
+    original_tensor: Optional[torch.Tensor] = None
+    perturbed_tensor: Optional[torch.Tensor] = None
+
+    def to_dict(self, include_tensors: bool = False) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        result = {
+            "image_index": self.image_index,
+            "original_prediction": self.original_prediction,
+            "perturbed_prediction": self.perturbed_prediction,
+            "perturbation_name": self.perturbation_name,
+            "perturbation_strength": self.perturbation_strength,
+            "perturbation_params": self.perturbation_params,
+            "confidence_drop": self.confidence_drop,
+            "original_confidence": self.original_confidence,
+            "perturbed_confidence": self.perturbed_confidence,
+        }
+        if include_tensors:
+            result["has_original_tensor"] = self.original_tensor is not None
+            result["has_perturbed_tensor"] = self.perturbed_tensor is not None
+        return result
 
 
 @dataclass
@@ -163,6 +249,7 @@ class Report:
     model_queries: int
     # Paper-aligned summary fields (optional and additive for compatibility)
     model_name: Optional[str] = None
+    preset: Optional[str] = None
     dataset: Optional[str] = None
     property_name: Optional[str] = None
     strategy: Optional[str] = None
@@ -189,6 +276,11 @@ class Report:
     run_meta: Optional[Dict[str, Any]] = None
     per_sample: Optional[List[Dict[str, Any]]] = None
     aggregates: Optional[Dict[str, Any]] = None
+    # Internal storage for Failure objects
+    _failure_objects: List[Failure] = field(default_factory=list)
+    # Normalization params for image export
+    _mean: Optional[List[float]] = None
+    _std: Optional[List[float]] = None
 
     @property
     def robust_accuracy(self) -> Optional[float]:
@@ -318,14 +410,20 @@ class Report:
         Returns:
             List of dictionaries containing failure information
         """
+        all_failures: List[Dict[str, Any]] = []
+
+        # Include failures from search results (dict format)
         if self.search and isinstance(self.search, dict):
             results = self.search.get("results", [])
-            all_failures = []
             for result in results:
                 if "failures" in result:
                     all_failures.extend(result["failures"])
-            return all_failures
-        return []
+
+        # Include failures from _failure_objects (Failure format)
+        for f in self._failure_objects:
+            all_failures.append(f.to_dict())
+
+        return all_failures
 
     @property
     def summary(self) -> Dict[str, Any]:
@@ -352,30 +450,20 @@ class Report:
 
         Automatically detects the environment:
         - Jupyter: Inline HTML display
-        - Interactive Python: Print formatted summary
+        - Interactive Python: Opens browser with HTML report
         - Script: Print concise summary
 
         Args:
-            mode: Force a specific mode ("jupyter", "interactive", "text", or None for auto)
+            mode: Force a specific mode ("jupyter", "interactive", "script", or None for auto)
         """
         # Auto-detect mode if not specified
         if mode is None:
-            try:
-                # Check if we're in Jupyter
-                get_ipython  # type: ignore # noqa: F821
-                mode = "jupyter"
-            except NameError:
-                # Check if we're in interactive mode
-                import sys
-                if hasattr(sys, "ps1"):
-                    mode = "interactive"
-                else:
-                    mode = "text"
+            mode = _detect_environment()
 
         if mode == "jupyter":
             self._show_jupyter()
         elif mode == "interactive":
-            self._show_interactive()
+            self._show_browser()
         else:
             self._show_text()
 
@@ -408,10 +496,22 @@ class Report:
 
         print("=" * 60 + "\n")
 
-    def _show_interactive(self) -> None:
-        """Print detailed interactive summary."""
-        self._show_text()  # Use same as text for now
-        print("💡 Tip: Use report.summary for a dict, or report.save() to save results")
+    def _show_browser(self) -> None:
+        """Open HTML report in browser."""
+        html_content = self._generate_html_full()
+
+        results_dir = get_results_dir()
+        os.makedirs(results_dir, exist_ok=True)
+
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        safe_name = _sanitize_filename(self.test_name)
+        report_path = os.path.join(results_dir, f"{safe_name}_{timestamp}.html")
+
+        with open(report_path, "w") as f:
+            f.write(html_content)
+
+        webbrowser.open(f"file://{report_path}")
+        print(f"Report opened in browser: {report_path}")
 
     def _show_jupyter(self) -> None:
         """Display rich HTML in Jupyter notebook."""
@@ -463,6 +563,168 @@ class Report:
         html += "</div>"
         return html
 
+    def _generate_html_full(self) -> str:
+        """Generate full HTML page for browser display with modern styling."""
+        score_pct = self.score * 100 if self.score else 0
+
+        # Score color based on robustness
+        if score_pct >= 70:
+            score_color = "#4CAF50"  # Green
+        elif score_pct >= 40:
+            score_color = "#FF9800"  # Orange
+        else:
+            score_color = "#F44336"  # Red
+
+        # Build failures table rows from both dict failures and Failure objects
+        failures_rows = ""
+        all_failures = self.failures + [f.to_dict() for f in self._failure_objects]
+        for f in all_failures[:20]:
+            if isinstance(f, dict):
+                img_idx = f.get("image_index", f.get("index", "?"))
+                orig = f.get("original_prediction", f.get("clean_label", "?"))
+                pert = f.get("perturbed_prediction", f.get("pert_label", "?"))
+                strat = f.get("perturbation_name", f.get("strategy", "?"))
+                strength = f.get("perturbation_strength", f.get("threshold", 0))
+                conf_drop = f.get("confidence_drop", 0)
+            else:
+                img_idx = f.image_index
+                orig = f.original_prediction
+                pert = f.perturbed_prediction
+                strat = f.perturbation_name
+                strength = f.perturbation_strength
+                conf_drop = f.confidence_drop
+
+            failures_rows += f"""
+            <tr>
+                <td>{img_idx}</td>
+                <td>{html_module.escape(str(orig))}</td>
+                <td>{html_module.escape(str(pert))}</td>
+                <td>{html_module.escape(str(strat))}</td>
+                <td>{strength:.4f}</td>
+                <td>{conf_drop:.4f}</td>
+            </tr>
+            """
+
+        preset_display = f"Preset: {html_module.escape(self.preset)} |" if self.preset else ""
+        model_display = self.model_name or self.test_name
+
+        content = f"""
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                    max-width: 900px; margin: 0 auto; padding: 20px;">
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        color: white; padding: 30px; border-radius: 10px; margin-bottom: 20px;">
+                <h1 style="margin: 0 0 10px 0;">VisProbe Report</h1>
+                <h2 style="margin: 0; opacity: 0.9;">{html_module.escape(model_display)}</h2>
+                <p style="margin: 10px 0 0 0; opacity: 0.8;">
+                    {preset_display}
+                    {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+                </p>
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px;">
+                <div style="background: white; padding: 20px; border-radius: 8px;
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
+                    <div style="font-size: 36px; font-weight: bold; color: {score_color};">
+                        {score_pct:.1f}%
+                    </div>
+                    <div style="color: #666; font-size: 14px;">Robustness Score</div>
+                </div>
+                <div style="background: white; padding: 20px; border-radius: 8px;
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
+                    <div style="font-size: 36px; font-weight: bold; color: #333;">
+                        {self.total_samples or 0}
+                    </div>
+                    <div style="color: #666; font-size: 14px;">Total Samples</div>
+                </div>
+                <div style="background: white; padding: 20px; border-radius: 8px;
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
+                    <div style="font-size: 36px; font-weight: bold; color: #4CAF50;">
+                        {self.passed_samples or 0}
+                    </div>
+                    <div style="color: #666; font-size: 14px;">Passed</div>
+                </div>
+                <div style="background: white; padding: 20px; border-radius: 8px;
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center;">
+                    <div style="font-size: 36px; font-weight: bold; color: #F44336;">
+                        {len(all_failures)}
+                    </div>
+                    <div style="color: #666; font-size: 14px;">Failures</div>
+                </div>
+            </div>
+
+            <div style="background: white; padding: 20px; border-radius: 8px;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px;">
+                <h3 style="margin-top: 0; color: #333;">Performance</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div>
+                        <span style="color: #666;">Runtime:</span>
+                        <strong>{self.runtime:.2f}s</strong>
+                    </div>
+                    <div>
+                        <span style="color: #666;">Model Queries:</span>
+                        <strong>{self.model_queries:,}</strong>
+                    </div>
+                </div>
+            </div>
+        """
+
+        # Add failures table if there are failures
+        if all_failures:
+            content += f"""
+            <div style="background: white; padding: 20px; border-radius: 8px;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                <h3 style="margin-top: 0; color: #333;">
+                    Failure Cases ({len(all_failures)} total, showing first 20)
+                </h3>
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                        <thead>
+                            <tr style="background: #f5f5f5;">
+                                <th style="padding: 10px; text-align: left; border-bottom: 2px solid #ddd;">Index</th>
+                                <th style="padding: 10px; text-align: left; border-bottom: 2px solid #ddd;">Original</th>
+                                <th style="padding: 10px; text-align: left; border-bottom: 2px solid #ddd;">Perturbed</th>
+                                <th style="padding: 10px; text-align: left; border-bottom: 2px solid #ddd;">Strategy</th>
+                                <th style="padding: 10px; text-align: left; border-bottom: 2px solid #ddd;">Strength</th>
+                                <th style="padding: 10px; text-align: left; border-bottom: 2px solid #ddd;">Conf. Drop</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {failures_rows}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            """
+
+        content += "</div>"
+
+        return f"""
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>VisProbe Report - {html_module.escape(model_display)}</title>
+            <style>
+                body {{
+                    margin: 0;
+                    padding: 20px;
+                    background: #f5f5f5;
+                }}
+                table tr:hover {{
+                    background: #f9f9f9;
+                }}
+                td, th {{
+                    border-bottom: 1px solid #eee;
+                }}
+            </style>
+        </head>
+        <body>
+            {content}
+        </body>
+        </html>
+        """
+
     def export_failures(self, n: int = 10, output_dir: Optional[str] = None) -> str:
         """
         Export the top N failure cases as a dataset.
@@ -490,3 +752,77 @@ class Report:
         print(f"   Metadata: {metadata_path}")
 
         return output_dir
+
+    def add_failure(self, failure: Failure) -> None:
+        """
+        Add a Failure object to the report.
+
+        Args:
+            failure: Failure object to add
+        """
+        self._failure_objects.append(failure)
+
+    def add_metric(self, key: str, value: Any) -> None:
+        """
+        Add a custom metric to the report.
+
+        Args:
+            key: Metric name
+            value: Metric value
+        """
+        if self.metrics is None:
+            self.metrics = {}
+        self.metrics[key] = value
+
+    @classmethod
+    def from_json(cls, path: str) -> "Report":
+        """
+        Load a Report from a JSON file.
+
+        Args:
+            path: Path to the JSON file
+
+        Returns:
+            Report instance
+        """
+        with open(path) as f:
+            data = json.load(f)
+
+        report = cls(
+            test_name=data.get("test_name", "unknown"),
+            test_type=data.get("test_type", "unknown"),
+            runtime=data.get("runtime", data.get("runtime_sec", 0.0)),
+            model_queries=data.get("model_queries", data.get("num_queries", 0)),
+            model_name=data.get("model_name"),
+            preset=data.get("preset"),
+            dataset=data.get("dataset"),
+            total_samples=data.get("total_samples"),
+            passed_samples=data.get("passed_samples"),
+            metrics=data.get("metrics"),
+            search=data.get("search"),
+        )
+
+        # Load failures as Failure objects if present
+        for f_data in data.get("failures", []):
+            if isinstance(f_data, dict) and "image_index" in f_data:
+                failure = Failure(
+                    image_index=f_data["image_index"],
+                    original_prediction=f_data.get("original_prediction", "?"),
+                    perturbed_prediction=f_data.get("perturbed_prediction", "?"),
+                    perturbation_name=f_data.get("perturbation_name", "unknown"),
+                    perturbation_strength=f_data.get("perturbation_strength", 0.0),
+                    perturbation_params=f_data.get("perturbation_params", {}),
+                    confidence_drop=f_data.get("confidence_drop", 0.0),
+                    original_confidence=f_data.get("original_confidence", 0.0),
+                    perturbed_confidence=f_data.get("perturbed_confidence", 0.0),
+                )
+                report.add_failure(failure)
+
+        return report
+
+    def __repr__(self) -> str:
+        score_str = f"{self.score:.2%}" if self.score is not None else "N/A"
+        return (
+            f"Report(test_name={self.test_name!r}, test_type={self.test_type!r}, "
+            f"score={score_str}, failures={len(self.failures) + len(self._failure_objects)})"
+        )

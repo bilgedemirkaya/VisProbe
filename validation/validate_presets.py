@@ -136,7 +136,7 @@ def create_comparison_grid(original_images, perturbed_images_dict, labels, outpu
         # Original image
         ax = axes[i, 0]
         img = denormalize_for_display(original_images[i]).permute(1, 2, 0).cpu().numpy()
-        ax.imshow(img)
+        ax.imshow(img, interpolation='nearest')  # No blurring interpolation
         ax.set_title(f"Original\n{labels[i]}", fontsize=10)
         ax.axis('off')
 
@@ -145,12 +145,12 @@ def create_comparison_grid(original_images, perturbed_images_dict, labels, outpu
             ax = axes[i, j]
             perturbed = perturbed_images_dict[level][i]
             img = denormalize_for_display(perturbed).permute(1, 2, 0).cpu().numpy()
-            ax.imshow(img)
+            ax.imshow(img, interpolation='nearest')  # No blurring interpolation
             ax.set_title(f"Level: {level:.2f}", fontsize=10)
             ax.axis('off')
 
     plt.tight_layout()
-    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    plt.savefig(output_path, dpi=200, bbox_inches='tight')  # Higher DPI for sharper images
     plt.close()
 
     print(f"  ✓ Saved: {output_path}")
@@ -181,7 +181,7 @@ def validate_preset(preset_name, num_samples=10, output_dir="validation/output")
     # Load test data (CIFAR-10)
     print(f"\nLoading {num_samples} CIFAR-10 test samples...")
     transform = T.Compose([
-        T.Resize(64),  # Smaller for faster processing
+        T.Resize(224, interpolation=T.InterpolationMode.BICUBIC),  # Higher resolution for validation
         T.ToTensor(),
     ])
 

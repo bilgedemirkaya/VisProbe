@@ -77,8 +77,6 @@ markdown_extensions:
 nav:
   - Home: index.md
   - User Guide: user-guide.md
-  - Architecture: architecture.md
-  - Design Rationale: design-rationale.md
   - API Reference:
       - Overview: api/index.md
   - Examples:
