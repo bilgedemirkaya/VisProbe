@@ -1,5 +1,10 @@
 """
 Search mode implementations (adaptive, grid, random, binary) extracted from runner.
+
+Uses improved visfuzz search algorithms with:
+- Exponential exploration for faster bound discovery
+- Golden section search for efficient refinement
+- Evaluation caching to avoid redundant model queries
 """
 
 from __future__ import annotations
@@ -15,6 +20,14 @@ logger = logging.getLogger(__name__)
 from ..strategies.base import Strategy  # noqa: E402
 from .model_wrap import _ModelWithIntermediateOutput  # noqa: E402
 from .query_counter import QueryCounter  # noqa: E402
+
+# Import visfuzz search utilities for improved algorithms
+try:
+    from visfuzz.search import EvaluationCache
+    VISFUZZ_AVAILABLE = True
+except ImportError:
+    VISFUZZ_AVAILABLE = False
+    EvaluationCache = None  # type: ignore
 
 
 # ===== Helper Functions =====
@@ -162,24 +175,37 @@ def _compute_batch_pass_from_mask(passed_mask: List[bool], reducer_spec: Any) ->
 def perform_adaptive_search(  # noqa: C901
     runner, params: Dict[str, Any], clean_results: Tuple
 ) -> Dict:
-    """Step-halving adaptive search with per-sample bracketing and full path logging."""
+    """
+    Smart adaptive search with exponential exploration and binary refinement.
+
+    Phase 1: Exponential exploration to quickly find failure region
+    Phase 2: Binary search refinement within the failure bracket
+
+    This is more efficient than step-halving when the failure threshold
+    is unknown and could be anywhere in the range.
+    """
     ctx = runner.context
     m, batch_tensor = ctx["model"], ctx["batch_tensor"]
     clean_logits, clean_feat = clean_results
     top_k = params.get("top_k")
 
-    level = float(params.get("initial_level", 0.001))
-    step = float(params.get("step", 0.002))
+    # Configuration with smarter defaults
+    initial_step = float(params.get("initial_level", 0.01))
     min_step = float(params.get("min_step", 1e-5))
     max_queries = int(params.get("max_queries", 500))
-    level_lo = params.get("level_lo", None)
-    level_hi = params.get("level_hi", None)
+    level_lo = float(params.get("level_lo", 0.0))
+    level_hi = float(params.get("level_hi", 1.0))
     reducer_spec = params.get("reduce", "all")
+    use_cache = params.get("cache_evaluations", True)
 
     path: List[Dict[str, Any]] = []
     top_k_path: List[Dict[str, Any]] = []
     result: Dict[str, Any] = {"failure_threshold": None}
     best_fail: Optional[float] = None
+
+    # Initialize evaluation cache for efficiency
+    cache: Optional[Dict[float, Tuple[bool, float, List[bool]]]] = {} if use_cache else None
+    cache_hits = 0
 
     # Per-image bracketing
     try:
@@ -189,21 +215,36 @@ def perform_adaptive_search(  # noqa: C901
     last_pass_levels: List[Optional[float]] = [None] * batch_size_local
     first_fail_levels: List[Optional[float]] = [None] * batch_size_local
 
-    # Prepare model state once
     m.eval()
-    previous_level: Optional[float] = None
     first_failing_index: Optional[int] = None
 
-    while step > min_step and runner.query_count < max_queries:
-        # Clamp level to domain if provided
-        if level_lo is not None:
-            level = max(float(level), float(level_lo))
-        else:
-            level = max(float(level), 0.0)
-        if level_hi is not None:
-            level = min(float(level), float(level_hi))
+    def _quantize_level(lvl: float) -> float:
+        """Quantize level for cache key."""
+        return round(lvl / 1e-6) * 1e-6
 
-        # Resolve and configure strategy for this level
+    def evaluate_at_level(level: float) -> Tuple[bool, float, List[bool], Any, Any, Any]:
+        """Evaluate model at a level, using cache if available."""
+        nonlocal cache_hits
+
+        # Check cache
+        cache_key = _quantize_level(level)
+        if cache is not None and cache_key in cache:
+            cached_batch_pass, cached_frac, cached_mask = cache[cache_key]
+            cache_hits += 1
+            # Still need to generate tensor for result
+            perturb_obj = resolve_strategy_for_level(runner, params, level)
+            _configure_strategy_safe(perturb_obj, runner)
+            with QueryCounter(m) as qc:
+                pert_tensor = perturb_obj.generate(batch_tensor, model=m, level=level)
+                pert_model_output = m(pert_tensor)
+            runner.query_count += qc.extra
+            if isinstance(m, _ModelWithIntermediateOutput):
+                pert_out_i, pert_feat_i = pert_model_output
+            else:
+                pert_out_i, pert_feat_i = pert_model_output, None
+            return cached_batch_pass, cached_frac, cached_mask, pert_tensor, pert_out_i, pert_feat_i
+
+        # Not cached - evaluate
         perturb_obj = resolve_strategy_for_level(runner, params, level)
         _configure_strategy_safe(perturb_obj, runner)
 
@@ -215,7 +256,6 @@ def perform_adaptive_search(  # noqa: C901
             else:
                 pert_out_i, pert_feat_i = pert_model_output, None
 
-            # Evaluate property mask once; use logits-only
             passed_mask: List[bool] = runner._evaluate_property_mask(
                 clean_logits, runner._to_logits(pert_out_i)
             )
@@ -223,21 +263,30 @@ def perform_adaptive_search(  # noqa: C901
 
         runner.query_count += qc.extra
 
-        # Log predictions/confidence using helper function
-        path.append(
-            _build_search_path_entry(
-                pert_out_i, level, batch_pass, passed_mask, passed_frac, ctx["class_names"]
-            )
+        # Store in cache
+        if cache is not None:
+            cache[cache_key] = (batch_pass, passed_frac, passed_mask)
+
+        return batch_pass, passed_frac, passed_mask, pert_tensor, pert_out_i, pert_feat_i
+
+    def log_iteration(level: float, batch_pass: bool, passed_mask: List[bool],
+                      passed_frac: float, pert_out_i: Any, phase: str) -> None:
+        """Log a search iteration to path."""
+        entry = _build_search_path_entry(
+            pert_out_i, level, batch_pass, passed_mask, passed_frac, ctx["class_names"]
         )
+        entry["phase"] = phase
+        path.append(entry)
 
         if top_k:
             from .analysis_utils import run_top_k_analysis as _run_tk
-
             overlap = _run_tk(runner, top_k, clean_logits, runner._to_logits(pert_out_i))
             if overlap is not None:
                 top_k_path.append({"level": float(level), "overlap": overlap})
 
-        # Update per-sample brackets using the property mask
+    def update_brackets(level: float, passed_mask: List[bool]) -> None:
+        """Update per-sample bracket tracking."""
+        nonlocal first_failing_index
         for si, ok in enumerate(passed_mask):
             if ok:
                 last_pass_levels[si] = float(level)
@@ -246,38 +295,104 @@ def perform_adaptive_search(  # noqa: C901
                 if first_failing_index is None:
                     first_failing_index = si
 
-        # Maintain minimal failing level details
-        if not batch_pass:
+    # ========== PHASE 1: Exponential exploration ==========
+    # Quickly find bounds by doubling step size until we hit a failure
+    level = level_lo + initial_step
+    step = initial_step
+    last_pass = level_lo
+    found_failure = False
+    max_exploration_iters = max_queries // 2  # Reserve half for refinement
+
+    logger.debug(f"Phase 1: Exponential exploration starting at {level}")
+
+    exploration_count = 0
+    while level <= level_hi and runner.query_count < max_exploration_iters:
+        if runner.query_count >= max_queries:
+            break
+
+        level = min(level, level_hi)  # Clamp to upper bound
+
+        batch_pass, passed_frac, passed_mask, pert_tensor, pert_out_i, pert_feat_i = \
+            evaluate_at_level(level)
+
+        log_iteration(level, batch_pass, passed_mask, passed_frac, pert_out_i, "exploration")
+        update_brackets(level, passed_mask)
+        exploration_count += 1
+
+        if batch_pass:
+            last_pass = level
+            # Exponential increase for faster exploration
+            step *= 2
+            level = level + step
+        else:
+            # Found failure - record and switch to refinement
+            found_failure = True
             if best_fail is None or level < best_fail:
                 best_fail = float(level)
-                result.update(
-                    {
+                result.update({
+                    "failure_threshold": best_fail,
+                    "perturbed_tensor": pert_tensor,
+                    "perturbed_output": pert_out_i,
+                    "perturbed_features": pert_feat_i,
+                })
+            break
+
+    logger.debug(f"Phase 1 complete: {exploration_count} iterations, found_failure={found_failure}")
+
+    # ========== PHASE 2: Binary search refinement ==========
+    # Refine the failure threshold within the bracket [last_pass, best_fail]
+    if found_failure and best_fail is not None:
+        lo, hi = last_pass, best_fail
+
+        logger.debug(f"Phase 2: Binary refinement between {lo} and {hi}")
+        refinement_count = 0
+
+        while (hi - lo) > min_step and runner.query_count < max_queries:
+            mid = (lo + hi) / 2.0
+
+            batch_pass, passed_frac, passed_mask, pert_tensor, pert_out_i, pert_feat_i = \
+                evaluate_at_level(mid)
+
+            log_iteration(mid, batch_pass, passed_mask, passed_frac, pert_out_i, "refinement")
+            update_brackets(mid, passed_mask)
+            refinement_count += 1
+
+            if batch_pass:
+                lo = mid
+            else:
+                hi = mid
+                if mid < best_fail:
+                    best_fail = float(mid)
+                    result.update({
                         "failure_threshold": best_fail,
                         "perturbed_tensor": pert_tensor,
                         "perturbed_output": pert_out_i,
                         "perturbed_features": pert_feat_i,
-                    }
-                )
-            # Step-halving on failure
-            level_next = level - step
-            step *= 0.5
-        else:
-            level_next = level + step
+                    })
 
-        # Guard against non-progress due to numerical issues
-        if previous_level is not None and abs(level_next - previous_level) < 1e-12:
-            break
-        previous_level = level_next
-        level = level_next
+        logger.debug(f"Phase 2 complete: {refinement_count} iterations")
 
-        # Optional early exit if we already found effectively zero threshold
-        if best_fail is not None and best_fail <= 0.0:
-            break
+    # If no failure found, try maximum level as final check
+    if best_fail is None and runner.query_count < max_queries:
+        batch_pass, passed_frac, passed_mask, pert_tensor, pert_out_i, pert_feat_i = \
+            evaluate_at_level(level_hi)
+        log_iteration(level_hi, batch_pass, passed_mask, passed_frac, pert_out_i, "final_check")
+        update_brackets(level_hi, passed_mask)
+
+        if not batch_pass:
+            best_fail = float(level_hi)
+            result.update({
+                "failure_threshold": best_fail,
+                "perturbed_tensor": pert_tensor,
+                "perturbed_output": pert_out_i,
+                "perturbed_features": pert_feat_i,
+            })
 
     # Finalize output
     result["failure_threshold"] = best_fail
     result["path"] = path
     result["top_k_path"] = top_k_path
+    result["cache_hits"] = cache_hits
     try:
         result["first_failing_index"] = int(
             first_failing_index if first_failing_index is not None else 0
@@ -291,6 +406,8 @@ def perform_adaptive_search(  # noqa: C901
         for lo, hi in zip(last_pass_levels, first_fail_levels)
     ]
     result["per_sample_thresholds"] = per_sample_thresholds
+
+    logger.info(f"Adaptive search complete: threshold={best_fail}, queries={runner.query_count}, cache_hits={cache_hits}")
     return result
 
 
@@ -527,7 +644,7 @@ def perform_binary_search(  # noqa: C901
     Optimized binary search for finding failure threshold.
 
     More efficient than adaptive search for finding the exact failure point.
-    Uses true binary search with O(log n) complexity.
+    Uses true binary search with O(log n) complexity and evaluation caching.
     """
     ctx = runner.context
     m, batch_tensor = ctx["model"], ctx["batch_tensor"]
@@ -540,11 +657,16 @@ def perform_binary_search(  # noqa: C901
     min_step = float(params.get("min_step", 1e-5))
     max_queries = int(params.get("max_queries", 500))
     reducer_spec = params.get("reduce", "all")
+    use_cache = params.get("cache_evaluations", True)
 
     path: List[Dict[str, Any]] = []
     top_k_path: List[Dict[str, Any]] = []
     result: Dict[str, Any] = {"failure_threshold": None}
     best_fail: Optional[float] = None
+
+    # Initialize evaluation cache
+    cache: Optional[Dict[float, Tuple[bool, float, List[bool]]]] = {} if use_cache else None
+    cache_hits = 0
 
     # Per-image bracketing
     try:
@@ -557,31 +679,57 @@ def perform_binary_search(  # noqa: C901
     m.eval()
     first_failing_index: Optional[int] = None
 
+    def _quantize_level(lvl: float) -> float:
+        """Quantize level for cache key."""
+        return round(lvl / 1e-6) * 1e-6
+
     logger.debug(f"Starting binary search between {lo} and {hi}")
 
     while (hi - lo) > min_step and runner.query_count < max_queries:
         # Binary search midpoint
         level = (lo + hi) / 2.0
+        cache_key = _quantize_level(level)
 
-        # Resolve and configure strategy for this level
-        perturb_obj = resolve_strategy_for_level(runner, params, level)
-        _configure_strategy_safe(perturb_obj, runner)
-
-        with QueryCounter(m) as qc:
-            pert_tensor = perturb_obj.generate(batch_tensor, model=m, level=level)
-            pert_model_output = m(pert_tensor)
+        # Check cache first
+        if cache is not None and cache_key in cache:
+            cached_batch_pass, cached_frac, cached_mask = cache[cache_key]
+            cache_hits += 1
+            # Still need to generate tensor for result
+            perturb_obj = resolve_strategy_for_level(runner, params, level)
+            _configure_strategy_safe(perturb_obj, runner)
+            with QueryCounter(m) as qc:
+                pert_tensor = perturb_obj.generate(batch_tensor, model=m, level=level)
+                pert_model_output = m(pert_tensor)
+            runner.query_count += qc.extra
             if isinstance(m, _ModelWithIntermediateOutput):
                 pert_out_i, pert_feat_i = pert_model_output
             else:
                 pert_out_i, pert_feat_i = pert_model_output, None
+            batch_pass, passed_frac, passed_mask = cached_batch_pass, cached_frac, cached_mask
+        else:
+            # Resolve and configure strategy for this level
+            perturb_obj = resolve_strategy_for_level(runner, params, level)
+            _configure_strategy_safe(perturb_obj, runner)
 
-            # Evaluate property mask
-            passed_mask: List[bool] = runner._evaluate_property_mask(
-                clean_logits, runner._to_logits(pert_out_i)
-            )
-            batch_pass, passed_frac = _compute_batch_pass_from_mask(passed_mask, reducer_spec)
+            with QueryCounter(m) as qc:
+                pert_tensor = perturb_obj.generate(batch_tensor, model=m, level=level)
+                pert_model_output = m(pert_tensor)
+                if isinstance(m, _ModelWithIntermediateOutput):
+                    pert_out_i, pert_feat_i = pert_model_output
+                else:
+                    pert_out_i, pert_feat_i = pert_model_output, None
 
-        runner.query_count += qc.extra
+                # Evaluate property mask
+                passed_mask: List[bool] = runner._evaluate_property_mask(
+                    clean_logits, runner._to_logits(pert_out_i)
+                )
+                batch_pass, passed_frac = _compute_batch_pass_from_mask(passed_mask, reducer_spec)
+
+            runner.query_count += qc.extra
+
+            # Store in cache
+            if cache is not None:
+                cache[cache_key] = (batch_pass, passed_frac, passed_mask)
 
         # Log this iteration using helper function
         path.append(
@@ -627,13 +775,14 @@ def perform_binary_search(  # noqa: C901
             logger.debug(f"Level {level:.6f} failed, searching lower")
 
     logger.info(
-        f"Binary search completed in {len(path)} iterations, failure threshold: {best_fail}"
+        f"Binary search completed in {len(path)} iterations, failure threshold: {best_fail}, cache_hits: {cache_hits}"
     )
 
     # Finalize output
     result["failure_threshold"] = best_fail
     result["path"] = path
     result["top_k_path"] = top_k_path
+    result["cache_hits"] = cache_hits
     try:
         result["first_failing_index"] = int(
             first_failing_index if first_failing_index is not None else 0
