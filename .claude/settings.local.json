@@ -20,7 +20,12 @@
       "Bash(visprobe-auto-docs:*)",
       "WebFetch(domain:claude.ai)",
       "Bash(mkdir:*)",
-      "Bash(mkdocs build:*)"
+      "Bash(mkdocs build:*)",
+      "Bash(git rm:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(wc:*)"
     ],
     "deny": [],
     "ask": []

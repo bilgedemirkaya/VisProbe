@@ -150,4 +150,17 @@ visprobe_results/
 examples/*.json
 examples/*.csv
 examples/*.png
+data/*
 data/cifar-10-python.tar.gz
+data/cifar-10-batches-py
+*.tar.gz
+*.zip
+*.7z
+*.rar
+*.tar
+*.gz
+*.bz2
+*.xz
+*.tar.xz
+*.tar.gz
+*.tar.bz2
