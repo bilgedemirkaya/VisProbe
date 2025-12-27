@@ -34,7 +34,8 @@
       "Bash(xargs:*)",
       "Bash(sort echo \"\" echo \"visfuzz directory status:\" if [ -d \"/Users/bilgedemirkaya/Desktop/VisProbe/visfuzz\" ])",
       "Bash(then echo \"  ✗ visfuzz directory still exists!\" else echo \"  ✓ visfuzz directory deleted\" fi)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(cp:*)"
     ],
     "deny": [],
     "ask": []

@@ -1,10 +1,8 @@
 # Examples
 
-**For complete working examples, see:** [examples/ folder on GitHub](https://github.com/bilgedemirkaya/VisProbe/tree/main/examples)
+Working code examples to get you started.
 
-## Quick Examples
-
-### 1. Basic Usage (3 lines!)
+## Quick Start (3 lines)
 
 ```python
 from visprobe import quick_check
@@ -13,172 +11,166 @@ import torchvision.models as models
 model = models.resnet18(weights='IMAGENET1K_V1')
 test_data = [(torch.randn(3, 224, 224), 0) for _ in range(50)]
 
-report = quick_check(model, test_data, preset="standard")
+report = quick_check(model, test_data, preset="natural")
 print(f"Robustness: {report.score:.1%}")
 ```
 
-### 2. CIFAR-10 Example
-
-```python
-from visprobe import quick_check
-from torchvision.datasets import CIFAR10
-import torchvision.transforms as T
-
-# Load data
-transform = T.Compose([T.Resize(224), T.ToTensor()])
-dataset = CIFAR10(root='./data', train=False, download=True, transform=transform)
-test_data = [dataset[i] for i in range(100)]
-
-# Test robustness
-report = quick_check(model, test_data, preset="standard", budget=1000)
-
-# Analyze results
-report.show()
-if report.score < 0.70:
-    report.export_failures(n=20)
-```
-
-### 3. Compare Threat Models
-
-```python
-from visprobe import compare_threat_models
-
-# Test all three threat models at once
-results = compare_threat_models(model, test_data, budget=1000)
-
-# Results include per-threat-model scores
-print(f"Natural:        {results['scores']['natural']:.1%}")
-print(f"Adversarial:    {results['scores']['adversarial']:.1%}")
-print(f"Realistic:      {results['scores']['realistic_attack']:.1%}")
-```
-
-### 4. Custom Normalization
+## Test Different Threat Models
 
 ```python
 from visprobe import quick_check
 
-# ImageNet normalization
-report = quick_check(
-    model,
-    test_data,
-    preset="standard",
-    mean=(0.485, 0.456, 0.406),
-    std=(0.229, 0.224, 0.225)
-)
+# Test each threat model
+report_natural = quick_check(model, data, preset="natural")
+report_adv = quick_check(model, data, preset="adversarial")  # Requires ART
+report_real = quick_check(model, data, preset="realistic_attack")  # Requires ART
+
+print(f"Natural:     {report_natural.score:.1%}")
+print(f"Adversarial: {report_adv.score:.1%}")
+print(f"Realistic:   {report_real.score:.1%}")
 ```
 
-### 5. Export and Analyze Failures
+## Compare Models
 
 ```python
-report = quick_check(model, test_data, preset="standard")
+models_to_test = {
+    'resnet18': models.resnet18(weights='DEFAULT'),
+    'resnet50': models.resnet50(weights='DEFAULT'),
+    'mobilenet': models.mobilenet_v2(weights='DEFAULT'),
+}
 
-# Export worst failures
-export_path = report.export_failures(n=50)
-print(f"Exported to: {export_path}")
+for name, model in models_to_test.items():
+    report = quick_check(model, test_data, preset="natural", budget=500)
+    print(f"{name:15} {report.score:.1%}")
+```
 
-# Analyze by strategy
+## Export Hard Cases for Retraining
+
+```python
+report = quick_check(model, test_data, preset="natural")
+
+if report.score < 0.75:
+    # Export worst cases
+    export_path = report.export_failures(n=100)
+    print(f"Hard cases exported to {export_path}")
+
+    # Use these in your next training run
+    # augmented_data = load_images(export_path)
+    # model = retrain(model, augmented_data)
+```
+
+## Analyze Failure Patterns
+
+```python
 from collections import defaultdict
 
+report = quick_check(model, test_data, preset="natural")
+
+# Group failures by perturbation type
 by_strategy = defaultdict(list)
 for failure in report.failures:
     by_strategy[failure['strategy']].append(failure)
 
-for strategy, failures in by_strategy.items():
-    print(f"{strategy}: {len(failures)} failures")
+# Find weakest perturbation
+print("Failure counts by strategy:")
+for strategy, failures in sorted(by_strategy.items(), key=lambda x: -len(x[1])):
+    avg_level = sum(f['level'] for f in failures) / len(failures)
+    print(f"  {strategy:20} {len(failures):3d} failures (avg level: {avg_level:.3f})")
 ```
 
-## Complete Examples
-
-For full, runnable examples, visit the [examples/ folder on GitHub](https://github.com/bilgedemirkaya/VisProbe/tree/main/examples):
-
-### basic_example.py
-Minimal 3-line example showing the simplest possible usage.
-
-**Run time:** ~30 seconds
-
-### cifar10_example.py
-Complete CIFAR-10 workflow with proper normalization, failure analysis, and export.
-
-**Run time:** ~5-10 minutes
-
-### custom_model_example.py
-Template you can copy and modify for your own model.
-
-**Includes:**
-- Data loading
-- Threat-model-aware preset selection
-- Result interpretation
-- Best practices
-
-### threat_model_comparison.py
-Compare all three threat models to identify vulnerabilities to opportunistic attacks.
-
-**Output:**
-- Per-threat-model scores
-- Vulnerability detection
-- Gap analysis recommendations
-
-### quickstart.ipynb (Jupyter Notebook)
-
-For an interactive walkthrough:
-
-**Covers:**
-- Installation
-- Basic usage (all threat models)
-- Result interpretation
-- Failure analysis
-- Export and retraining
-- Threat model comparison
-
-**Time to complete:** 10-15 minutes
-
-## Use Case Examples
-
-### Production Validation
+## Production Validation
 
 ```python
-def test_production_robustness():
-    model = load_model("production_checkpoint.pth")
-    test_data = load_test_set()
+def validate_model_before_deployment(model, test_data):
+    """Test model meets production requirements."""
+    report = quick_check(model, test_data, preset="natural", budget=2000)
 
-    report = quick_check(model, test_data, preset="standard", budget=1000)
+    criteria = {
+        'robustness': (report.score, 0.75),
+        'max_failures': (len(report.failures), 50),
+    }
 
-    # Enforce threshold
-    assert report.score > 0.70, f"Robustness too low: {report.score:.1%}"
+    passed = all(val >= threshold for val, threshold in criteria.values())
 
-    report.save(f"robustness_report_{version}.json")
-    return report
+    if passed:
+        print("✅ Model approved for deployment")
+    else:
+        print("❌ Model failed validation:")
+        for metric, (val, thresh) in criteria.items():
+            status = "✅" if val >= thresh else "❌"
+            print(f"  {status} {metric}: {val} (threshold: {thresh})")
+        report.export_failures(n=20)
+
+    return passed
 ```
 
-### CI/CD Integration
+## CI/CD Integration
 
 ```python
-# In your test suite
+# In your test file (test_robustness.py)
+import pytest
+from visprobe import quick_check
+
 def test_model_robustness():
-    """CI test: model meets robustness requirements."""
-    report = quick_check(model, test_data, preset="standard")
-    assert report.score > THRESHOLD
+    """CI test: enforce robustness requirements."""
+    from your_model import load_model, get_test_data
+
+    model = load_model()
+    test_data = get_test_data()
+
+    report = quick_check(model, test_data, preset="natural", budget=1000)
+
+    # Fail if robustness is too low
+    assert report.score > 0.70, f"Robustness {report.score:.1%} below 70%"
+
+if __name__ == "__main__":
+    test_model_robustness()
 ```
 
-### Targeted Retraining
+## Track Robustness Over Time
 
 ```python
-report = quick_check(model, test_data, preset="standard")
+import json
+from datetime import datetime
 
-if report.score < 0.80:
-    # Export failures
-    path = report.export_failures(n=100)
+# After each training run
+report = quick_check(model, test_data, preset="natural")
 
-    # Add to training set
-    add_hard_examples(path)
+# Save to history
+history = []
+try:
+    with open('robustness_history.json') as f:
+        history = json.load(f)
+except:
+    pass
 
-    # Retrain
-    retrain_model()
+history.append({
+    'date': datetime.now().isoformat(),
+    'version': 'v1.2.3',
+    'score': report.score,
+    'failure_count': len(report.failures)
+})
+
+with open('robustness_history.json', 'w') as f:
+    json.dump(history, f)
+
+# Print trend
+print("Robustness trend:")
+for entry in history[-5:]:
+    print(f"  {entry['date'][:10]} v{entry['version']:6} Score: {entry['score']:.1%}")
 ```
 
-## Next Steps
+## Full Examples on GitHub
 
-- **Try the examples:** Clone the repo and run examples from [GitHub](https://github.com/bilgedemirkaya/VisProbe/tree/main/examples)
-- **Read the guide:** See [User Guide](../user-guide.md)
-- **Full API reference:** See [API Reference](../COMPREHENSIVE_API_REFERENCE.md)
-- **Troubleshooting:** See [TROUBLESHOOTING.md](../TROUBLESHOOTING.md)
+For complete, runnable examples with proper setup:
+
+- **[basic_example.py](https://github.com/bilgedemirkaya/VisProbe/tree/main/examples/basic_example.py)** - Minimal usage
+- **[cifar10_example.py](https://github.com/bilgedemirkaya/VisProbe/tree/main/examples/cifar10_example.py)** - Full CIFAR-10 workflow
+- **[threat_model_comparison.py](https://github.com/bilgedemirkaya/VisProbe/tree/main/examples/comparison.py)** - Compare all threat models
+- **[quickstart.ipynb](https://github.com/bilgedemirkaya/VisProbe/tree/main/examples/quickstart.ipynb)** - Interactive notebook
+
+## Need More Help?
+
+- **Getting Started?** See [User Guide](../user-guide.md)
+- **API Details?** Check [API Reference](../api/index.md)
+- **Still Stuck?** See [Troubleshooting](../TROUBLESHOOTING.md)

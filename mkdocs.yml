@@ -64,7 +64,8 @@ markdown_extensions:
   - pymdownx.arithmatex:
       generic: true
   - footnotes
-  - pymdownx.critic
+  - pymdownx.critic:
+      mode: accept
   - pymdownx.caret
   - pymdownx.keys
   - pymdownx.mark
@@ -81,7 +82,6 @@ nav:
       - Overview: api/index.md
   - Examples:
       - Overview: examples/index.md
-  - Deployment: deployment-guide.md
 
 extra:
   social:

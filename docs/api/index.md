@@ -1,94 +1,104 @@
 # API Reference
 
-**For the complete API reference, see:** [COMPREHENSIVE_API_REFERENCE.md](../COMPREHENSIVE_API_REFERENCE.md)
+Quick reference for the main VisProbe functions and classes.
 
-## Quick Reference
+## Main Functions
 
-### Main Functions
+### `quick_check()`
+
+The main entry point for robustness testing.
 
 ```python
-from visprobe import quick_check, compare_threat_models
+from visprobe import quick_check
 
-# Single threat model test
 report = quick_check(
+    model=your_model,              # PyTorch model
+    data=test_data,                # List of (image, label) tuples or DataLoader
+    preset="natural",              # "natural", "adversarial", "realistic_attack", "comprehensive"
+    budget=1000,                   # Model queries per strategy (higher = more precise)
+    device="auto",                 # "auto", "cuda", "cpu", "mps"
+    mean=None,                     # Normalization mean (optional)
+    std=None                       # Normalization std (optional)
+)
+```
+
+**Returns:** `Report` object with results
+
+### `compare_threat_models()`
+
+Compare all three threat models at once.
+
+```python
+from visprobe import compare_threat_models
+
+results = compare_threat_models(
     model=your_model,
     data=test_data,
-    preset="natural",  # Threat-model-aware preset
-    budget=1000,
-    device="auto"
+    budget=1000
 )
 
-# Compare all threat models
-results = compare_threat_models(your_model, test_data, budget=1000)
+print(results['scores'])  # {'natural': 0.75, 'adversarial': 0.65, 'realistic_attack': 0.55}
 ```
 
-### Report Object
+## Report Object
+
+Access and export results.
 
 ```python
-# Access results
-score = report.score                           # Overall robustness (0-1)
-threat_model = report.threat_model             # The threat model used
-threat_model_scores = report.threat_model_scores  # Per-threat-model breakdown
-vulnerability_warning = report.vulnerability_warning  # Opportunistic attack warning
-failures = report.failures                     # List of failure cases
-summary = report.summary                       # Metrics dictionary
+# Properties
+report.score                    # Overall robustness (0-1)
+report.threat_model             # Which threat model was used
+report.threat_model_scores      # Per-threat-model scores
+report.vulnerability_warning    # Warning if vulnerable to opportunistic attacks
+report.failures                 # List of failures
+report.summary                  # Dictionary of metrics
 
-# Display results
-report.show()                                  # Context-aware display
-
-# Export failures
-path = report.export_failures(n=10)            # Export top 10
+# Methods
+report.show()                   # Rich interactive display
+report.export_failures(n=10)    # Export top N failures
+report.save(path)               # Save to JSON
 ```
 
-### Available Presets (Threat-Model-Aware)
+## Available Presets
 
-**Passive Threat Model (No Adversary):**
-- **`"natural"`** - Environmental perturbations (brightness, blur, noise, compression)
+```
+"natural"          - Environmental perturbations
+"adversarial"      - Gradient-based attacks (requires ART)
+"realistic_attack" - Attacks in real conditions (requires ART)
+"comprehensive"    - All three threat models
+```
 
-**Active Threat Model (Adversarial):**
-- **`"adversarial"`** - Gradient-based attacks (FGSM, PGD, BIM)
+Legacy presets still supported: `"standard"`, `"lighting"`, `"blur"`, `"corruption"`
 
-**Active + Environmental (Realistic):**
-- **`"realistic_attack"`** ⭐ - Attacks under suboptimal conditions (low-light + FGSM, etc.)
+## Strategies
 
-**All Threat Models:**
-- **`"comprehensive"`** - Complete evaluation with per-threat-model breakdown
+Import from `visprobe.strategies.image`:
 
-**Legacy Presets (Deprecated):**
-- **`"standard"`**, **`"lighting"`**, **`"blur"`**, **`"corruption"`** - Still supported with deprecation warnings
+```python
+from visprobe.strategies.image import (
+    BrightnessStrategy,
+    ContrastStrategy,
+    GammaStrategy,
+    GaussianBlurStrategy,
+    MotionBlurStrategy,
+    JPEGCompressionStrategy,
+    GaussianNoiseStrategy
+)
+```
 
-### Strategies
+## Properties
 
-All strategies from `visprobe.strategies.image`:
+Import from `visprobe.properties.classification`:
 
-- `BrightnessStrategy(brightness_factor)`
-- `ContrastStrategy(contrast_factor)`
-- `GammaStrategy(gamma, gain=1.0)`
-- `GaussianBlurStrategy(kernel_size, sigma)`
-- `MotionBlurStrategy(kernel_size, angle)`
-- `JPEGCompressionStrategy(quality)`
-- `GaussianNoiseStrategy(std_dev, mean=None, std=None)`
-
-### Properties
-
-From `visprobe.properties.classification`:
-
-- `LabelConstant()` - Top-1 prediction must stay the same
-- `TopKStability(k, mode, ...)` - Top-k predictions stability
-- `ConfidenceDrop(max_drop)` - Limit confidence decrease
-- `L2Distance(max_delta)` - L2 distance between logits
+```python
+from visprobe.properties.classification import (
+    LabelConstant,           # Top-1 prediction must stay same
+    TopKStability,           # Top-k predictions stable
+    ConfidenceDrop,          # Limit confidence decrease
+    L2Distance               # L2 distance between logits
+)
+```
 
 ## Complete Documentation
 
-For full API documentation with all parameters, examples, and advanced usage:
-
-**→ See [COMPREHENSIVE_API_REFERENCE.md](../COMPREHENSIVE_API_REFERENCE.md)**
-
-## Examples
-
-For working code examples, visit the [examples/ folder on GitHub](https://github.com/bilgedemirkaya/VisProbe/tree/main/examples):
-
-- `basic_example.py` - Minimal 3-line usage
-- `cifar10_example.py` - Complete CIFAR-10 workflow
-- `custom_model_example.py` - Template for your models
-- `threat_model_comparison.py` - Compare all threat models
+For full parameters and advanced usage: See [COMPREHENSIVE_API_REFERENCE.md](../COMPREHENSIVE_API_REFERENCE.md)
