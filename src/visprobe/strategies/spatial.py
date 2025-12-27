@@ -17,7 +17,7 @@ from typing import Any, Optional, Tuple
 import torch
 import torch.nn.functional as F
 
-from .base import BatchedPerturbation
+from .perturbation_base import BatchedPerturbation
 
 __all__ = [
     "Rotation",

@@ -282,6 +282,80 @@ class Report:
     _mean: Optional[List[float]] = None
     _std: Optional[List[float]] = None
 
+    # ===== Threat Model Aware Fields =====
+
+    @property
+    def threat_model(self) -> Optional[str]:
+        """
+        The threat model used for this test.
+
+        Returns one of:
+        - "passive": Natural perturbations only (no adversary)
+        - "active": Adversarial attacks (white-box adversary)
+        - "active_environmental": Combined natural + adversarial
+        - "all": Comprehensive testing across all threat models
+        """
+        if self.metrics:
+            return self.metrics.get("threat_model")
+        if self.search and isinstance(self.search, dict):
+            return self.search.get("threat_model")
+        return None
+
+    @property
+    def threat_model_scores(self) -> Optional[Dict[str, float]]:
+        """
+        Per-threat-model robustness scores (for comprehensive tests).
+
+        Returns dict like:
+        {
+            "natural": 0.75,
+            "adversarial": 0.60,
+            "realistic_attack": 0.45
+        }
+
+        Only available when using "comprehensive" preset or when
+        outputs_threat_breakdown is True.
+        """
+        if self.metrics:
+            return self.metrics.get("threat_model_scores")
+        return None
+
+    @property
+    def threat_model_summary(self) -> Optional[Dict[str, Any]]:
+        """
+        Comprehensive threat model analysis including vulnerability detection.
+
+        Returns dict like:
+        {
+            "threat_model": "all",
+            "scores_by_threat": {"natural": 0.75, "adversarial": 0.60, "realistic_attack": 0.45},
+            "overall_score": 0.60,
+            "vulnerability_warning": "Model vulnerable to opportunistic attacks!..."
+        }
+        """
+        if self.metrics:
+            return self.metrics.get("threat_model_summary")
+        return None
+
+    @property
+    def vulnerability_warning(self) -> Optional[str]:
+        """
+        Warning message if model is vulnerable to opportunistic attacks.
+
+        This is the KEY INSIGHT: if realistic_attack score is significantly lower
+        than both natural and adversarial scores, the model has a blind spot.
+
+        Attackers can exploit environmental conditions (low-light, blur, compression)
+        to succeed with smaller adversarial perturbations.
+        """
+        if self.metrics:
+            return self.metrics.get("vulnerability_warning")
+        return None
+
+    def has_threat_breakdown(self) -> bool:
+        """Check if this report includes threat model breakdown."""
+        return self.threat_model_scores is not None
+
     @property
     def robust_accuracy(self) -> Optional[float]:
         if (
@@ -431,9 +505,10 @@ class Report:
         Key metrics summary dictionary.
 
         Returns:
-            Dictionary with test_name, score, failures, runtime, queries
+            Dictionary with test_name, score, failures, runtime, queries,
+            and threat model information if available
         """
-        return {
+        result = {
             "test_name": self.test_name,
             "test_type": self.test_type,
             "score": self.score,
@@ -443,6 +518,18 @@ class Report:
             "total_samples": self.total_samples,
             "passed_samples": self.passed_samples,
         }
+
+        # Add threat model information if available
+        if self.threat_model:
+            result["threat_model"] = self.threat_model
+
+        if self.threat_model_scores:
+            result["threat_model_scores"] = self.threat_model_scores
+
+        if self.vulnerability_warning:
+            result["has_vulnerability_warning"] = True
+
+        return result
 
     def show(self, mode: Optional[str] = None) -> None:
         """
@@ -473,9 +560,42 @@ class Report:
         print(f"VisProbe Report: {self.test_name}")
         print("=" * 60)
         print(f"Test type: {self.test_type}")
+
+        # Show threat model if available
+        if self.threat_model:
+            threat_labels = {
+                "passive": "Passive (Natural Perturbations)",
+                "active": "Active (Adversarial Attacks)",
+                "active_environmental": "Active + Environmental (Realistic Attacks)",
+                "all": "Comprehensive (All Threat Models)",
+            }
+            threat_label = threat_labels.get(self.threat_model, self.threat_model)
+            print(f"Threat model: {threat_label}")
+
         if self.score is not None:
             print(f"Robustness score: {self.score:.2%}")
-        print(f"Failures found: {len(self.failures)}")
+
+        # Show threat model breakdown if available
+        if self.threat_model_scores:
+            print("\n" + "-" * 60)
+            print("Threat Model Breakdown:")
+            print("-" * 60)
+            for tm, tm_score in self.threat_model_scores.items():
+                # Format threat model name nicely
+                tm_display = tm.replace("_", " ").title()
+                bar_len = int(tm_score * 20)
+                bar = "#" * bar_len + "-" * (20 - bar_len)
+                print(f"  {tm_display:20s} {tm_score:6.1%} [{bar}]")
+
+        # Show vulnerability warning if present
+        if self.vulnerability_warning:
+            print("\n" + "!" * 60)
+            print("CRITICAL SECURITY WARNING")
+            print("!" * 60)
+            print(self.vulnerability_warning)
+            print("!" * 60)
+
+        print(f"\nFailures found: {len(self.failures)}")
         print(f"Total samples: {self.total_samples}")
         print(f"Passed samples: {self.passed_samples}")
         print(f"Runtime: {self.runtime:.1f}s")
@@ -492,7 +612,9 @@ class Report:
                     strategy_name = result.get("strategy", "Unknown")
                     score = result.get("robustness_score", 0)
                     threshold = result.get("failure_threshold", 0)
-                    print(f"  {strategy_name:30s} Score: {score:.2%}  Threshold: {threshold:.3f}")
+                    category = result.get("category", "")
+                    cat_suffix = f" [{category}]" if category and category != "uncategorized" else ""
+                    print(f"  {strategy_name:25s} Score: {score:.2%}  Threshold: {threshold:.3f}{cat_suffix}")
 
         print("=" * 60 + "\n")
 
@@ -529,6 +651,17 @@ class Report:
         score_pct = self.score * 100 if self.score else 0
         score_color = "#4CAF50" if score_pct > 70 else "#FF9800" if score_pct > 40 else "#F44336"
 
+        # Threat model display
+        threat_model_display = ""
+        if self.threat_model:
+            threat_labels = {
+                "passive": "Passive (Natural)",
+                "active": "Active (Adversarial)",
+                "active_environmental": "Realistic Attack",
+                "all": "Comprehensive",
+            }
+            threat_model_display = f"<p><strong>Threat Model:</strong> {threat_labels.get(self.threat_model, self.threat_model)}</p>"
+
         html = f"""
         <div style="border: 2px solid #ddd; padding: 20px; border-radius: 5px; font-family: Arial, sans-serif;">
             <h2 style="margin-top: 0;">VisProbe Report: {self.test_name}</h2>
@@ -536,6 +669,7 @@ class Report:
                 <div>
                     <h3 style="color: {score_color};">Robustness Score: {score_pct:.1f}%</h3>
                     <p><strong>Test Type:</strong> {self.test_type}</p>
+                    {threat_model_display}
                     <p><strong>Total Samples:</strong> {self.total_samples}</p>
                     <p><strong>Passed:</strong> {self.passed_samples}</p>
                 </div>
@@ -547,17 +681,44 @@ class Report:
             </div>
         """
 
+        # Add threat model breakdown if available
+        if self.threat_model_scores:
+            html += "<h3>Threat Model Breakdown</h3>"
+            html += "<div style='display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 15px;'>"
+            for tm, tm_score in self.threat_model_scores.items():
+                tm_pct = tm_score * 100
+                tm_color = "#4CAF50" if tm_pct > 70 else "#FF9800" if tm_pct > 40 else "#F44336"
+                tm_display = tm.replace("_", " ").title()
+                html += f"""
+                <div style="text-align: center; padding: 10px; border: 1px solid #ddd; border-radius: 5px; min-width: 120px;">
+                    <div style="font-size: 24px; font-weight: bold; color: {tm_color};">{tm_pct:.1f}%</div>
+                    <div style="font-size: 12px; color: #666;">{tm_display}</div>
+                </div>
+                """
+            html += "</div>"
+
+        # Add vulnerability warning if present
+        if self.vulnerability_warning:
+            html += f"""
+            <div style="background-color: #ffebee; border: 2px solid #f44336; border-radius: 5px; padding: 15px; margin: 15px 0;">
+                <h4 style="color: #c62828; margin-top: 0;">Critical Security Warning</h4>
+                <pre style="white-space: pre-wrap; font-size: 12px; color: #333;">{html_module.escape(self.vulnerability_warning)}</pre>
+            </div>
+            """
+
         # Add per-strategy results if available
         if self.search and isinstance(self.search, dict):
             results = self.search.get("results", [])
             if results:
                 html += "<h3>Per-Strategy Results</h3><table style='width:100%; border-collapse: collapse;'>"
-                html += "<tr style='background-color: #f0f0f0;'><th style='padding: 8px; text-align: left;'>Strategy</th><th style='padding: 8px;'>Score</th><th style='padding: 8px;'>Threshold</th></tr>"
+                html += "<tr style='background-color: #f0f0f0;'><th style='padding: 8px; text-align: left;'>Strategy</th><th style='padding: 8px;'>Category</th><th style='padding: 8px;'>Score</th><th style='padding: 8px;'>Threshold</th></tr>"
                 for result in results:
                     strategy = result.get("strategy", "Unknown")
+                    category = result.get("category", "")
                     score = result.get("robustness_score", 0) * 100
                     threshold = result.get("failure_threshold", 0)
-                    html += f"<tr><td style='padding: 8px;'>{strategy}</td><td style='padding: 8px; text-align: center;'>{score:.1f}%</td><td style='padding: 8px; text-align: center;'>{threshold:.3f}</td></tr>"
+                    cat_display = category.replace("_", " ").title() if category and category != "uncategorized" else "-"
+                    html += f"<tr><td style='padding: 8px;'>{strategy}</td><td style='padding: 8px; text-align: center;'>{cat_display}</td><td style='padding: 8px; text-align: center;'>{score:.1f}%</td><td style='padding: 8px; text-align: center;'>{threshold:.3f}</td></tr>"
                 html += "</table>"
 
         html += "</div>"
@@ -667,6 +828,52 @@ class Report:
                 </div>
             </div>
         """
+
+        # Add threat model breakdown if available
+        if self.threat_model_scores:
+            content += """
+            <div style="background: white; padding: 20px; border-radius: 8px;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px;">
+                <h3 style="margin-top: 0; color: #333;">Threat Model Breakdown</h3>
+                <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+            """
+            for tm, tm_score in self.threat_model_scores.items():
+                tm_pct = tm_score * 100
+                if tm_pct >= 70:
+                    tm_color = "#4CAF50"
+                elif tm_pct >= 40:
+                    tm_color = "#FF9800"
+                else:
+                    tm_color = "#F44336"
+                tm_display = tm.replace("_", " ").title()
+                content += f"""
+                    <div style="flex: 1; min-width: 150px; text-align: center; padding: 15px;
+                                border: 2px solid {tm_color}; border-radius: 8px;">
+                        <div style="font-size: 32px; font-weight: bold; color: {tm_color};">
+                            {tm_pct:.1f}%
+                        </div>
+                        <div style="color: #666; font-size: 14px; margin-top: 5px;">
+                            {tm_display}
+                        </div>
+                    </div>
+                """
+            content += """
+                </div>
+            </div>
+            """
+
+        # Add vulnerability warning if present
+        if self.vulnerability_warning:
+            content += f"""
+            <div style="background: #ffebee; padding: 20px; border-radius: 8px;
+                        border: 2px solid #f44336; margin-bottom: 20px;">
+                <h3 style="margin-top: 0; color: #c62828;">
+                    Critical Security Warning
+                </h3>
+                <pre style="white-space: pre-wrap; font-size: 13px; color: #333;
+                            font-family: inherit; margin: 0;">{html_module.escape(self.vulnerability_warning)}</pre>
+            </div>
+            """
 
         # Add failures table if there are failures
         if all_failures:

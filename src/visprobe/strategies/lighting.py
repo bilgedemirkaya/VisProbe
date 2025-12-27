@@ -15,7 +15,7 @@ from typing import Any
 
 import torch
 
-from .base import BatchedPerturbation
+from .perturbation_base import BatchedPerturbation
 
 __all__ = [
     "Brightness",

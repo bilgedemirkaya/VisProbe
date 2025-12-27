@@ -7,7 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
+### Added - Threat-Model-Aware Preset System ⭐
+
+**Major Feature: Threat-Model-Aware Presets**
+- New preset architecture distinguishing between three threat models:
+  - **`natural`** - Environmental perturbations (passive threat model)
+  - **`adversarial`** - Gradient-based attacks (active threat model)
+  - **`realistic_attack`** - Attacks under suboptimal conditions (active + environmental) - **KEY CONTRIBUTION**
+  - **`comprehensive`** - Complete evaluation across all threat models
+- Opportunistic vulnerability detection: `_check_opportunistic_vulnerability()`
+- Per-threat-model robustness scoring with vulnerability warnings
+- New `compare_threat_models()` convenience function for comparing all presets
+- Adversarial strategy support: FGSM, PGD, BIM
+- Strategy categorization for comprehensive preset breakdown
+
+**Report Enhancements:**
+- `threat_model` property - Returns the threat model used for testing
+- `threat_model_scores` property - Per-threat-model breakdown
+- `threat_model_summary` property - Comprehensive analysis with vulnerability detection
+- `vulnerability_warning` property - Critical security warnings for opportunistic attacks
+- Updated display methods for threat model visualization:
+  - `_show_text()` - Console display with threat breakdown
+  - `_generate_html_summary()` - Jupyter display with colored cards
+  - `_generate_html_full()` - Browser report with breakdown section
+
+**Backward Compatibility:**
+- Legacy presets (standard, lighting, blur, corruption) maintained with deprecation warnings
+- Automatic migration hints for users
+
+**Other Additions:**
 - Shared CLI utilities module (`cli/utils.py`)
 - Helper functions for search path building and strategy configuration
 - Comprehensive docstrings for internal methods

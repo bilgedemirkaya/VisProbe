@@ -687,7 +687,7 @@ def validate_before_deployment(checkpoint_path):
 
 ## Next Steps
 
-- **See working examples**: Check out [`examples/`](../examples/)
+- **See working examples**: Check out [examples on GitHub](https://github.com/bilgedemirkaya/VisProbe/tree/main/examples)
 - **Full API reference**: See [`COMPREHENSIVE_API_REFERENCE.md`](../COMPREHENSIVE_API_REFERENCE.md)
 - **Troubleshooting**: See [`TROUBLESHOOTING.md`](../TROUBLESHOOTING.md)
 - **Report issues**: [GitHub Issues](https://github.com/bilgedemirkaya/VisProbe/issues)

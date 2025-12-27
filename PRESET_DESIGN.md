@@ -1,18 +1,70 @@
 # Preset Design and Range Justification
 
-This document explains the design rationale and parameter ranges for each VisProbe preset.
+This document explains the design rationale and parameter ranges for each VisProbe preset, with emphasis on the threat-model-aware architecture introduced in VisProbe 2.0.
 
 ---
 
-## Design Philosophy
+## Threat-Model-Aware Architecture (VisProbe 2.0)
+
+VisProbe now organizes presets around **explicit threat models** rather than generic perturbation categories. This enables realistic security testing and reveals vulnerabilities standard tests miss.
+
+### The Four Threat Models
+
+#### 1. **Passive (Natural)** - `natural` preset
+- **Definition:** Environmental perturbations without adversary
+- **Scenarios:** Weather, sensor noise, camera limitations, transmission artifacts
+- **Use Case:** Deployment robustness, production monitoring
+- **Key Insight:** Separates "nature vs. adversary" - what breaks naturally vs. maliciously
+
+#### 2. **Active (Adversarial)** - `adversarial` preset
+- **Definition:** Gradient-based white-box attacks on clean images
+- **Scenarios:** FGSM, PGD, BIM with standard ε=8/255
+- **Use Case:** Security testing, adversarial ML research
+- **Key Insight:** Measures defense against sophisticated attackers with full model access
+
+#### 3. **Active + Environmental (Realistic Attack)** - `realistic_attack` preset ⭐
+- **Definition:** Adversarial attacks under suboptimal environmental conditions
+- **Scenarios:** Attacker waits for low-light, blur, compression - then uses SMALLER perturbations
+- **Use Case:** Real-world threat modeling, security-critical deployment
+- **Key Insight:** **What standard tests miss!** A model robust to ε=8/255 may fail at ε=2/255 in low-light
+
+**Example Blind Spot:**
+```
+Clean Image Testing:
+  FGSM ε=8/255:    FAIL (model robust, survives attack)
+
+Realistic Attack Testing:
+  Low-light (0.4x brightness) + FGSM ε=2/255: PASS (but lower robustness)
+
+Vulnerability: Attacker can win with 4x SMALLER perturbation by timing attack!
+```
+
+#### 4. **All** - `comprehensive` preset
+- **Definition:** Combined evaluation across all three threat models
+- **Output:** Per-threat-model robustness scores + opportunistic vulnerability detection
+- **Use Case:** Research, benchmarking, publication-ready results
+
+### Design Philosophy
 
 **Goal:** Preset ranges must be aggressive enough to find real robustness issues, but conservative enough that perturbed images still preserve the original label.
 
 **Target:** 85-90% of perturbed images at maximum severity should still be recognizable by humans.
 
+**Threat-Aware Addition:** Each preset explicitly targets a threat model, enabling realistic threat assessment.
+
 ---
 
-## 1. Standard Preset
+## Legacy Presets (Deprecated, but Maintained)
+
+The original presets (`standard`, `lighting`, `blur`, `corruption`) are still available for backward compatibility but are deprecated in favor of threat-model-aware presets.
+
+**Migration Guide:**
+- Use `natural` instead of `standard`, `lighting`, `blur`, `corruption`
+- Use `comprehensive` for complete evaluation across all threat models
+
+---
+
+## 1. Natural Preset (Passive Threat Model)
 
 **Purpose:** General-purpose robustness testing with balanced coverage of common real-world perturbations.
 
@@ -76,12 +128,206 @@ This document explains the design rationale and parameter ranges for each VisPro
 - Compression artifacts + noise create realistic degradation
 - **Preserves label:** Yes, degraded but identifiable
 
-**Estimated Time:** 10-15 minutes for 100 images
+**Estimated Time:** 12-15 minutes for 100 images
 **Search Budget:** 2000 queries
 
 ---
 
-## 2. Lighting Preset
+## 2. Adversarial Preset (Active Threat Model)
+
+**Purpose:** Test robustness to gradient-based adversarial attacks under ideal conditions.
+
+**Threat Model:** White-box attacker with full model gradients, attacking clean images.
+
+**Target Scenarios:**
+- Security hardening of deployed models
+- Adversarial ML research and robustness benchmarking
+- Comparing model architectures for adversarial robustness
+- Certification and verification studies
+
+### Attack Strategies
+
+#### FGSM (Fast Gradient Sign Method)
+- **Epsilon Range:** 0 - 8/255 (0 - 0.031)
+- **Rationale:**
+  - ε=8/255 is standard in adversarial robustness literature (ImageNet, RobustBench)
+  - Single-step attack: efficient but less powerful than iterative methods
+  - Tests if model has shallow vulnerabilities
+  - ε=0.031 ≈ 8 intensity levels on 0-255 scale (imperceptible to human)
+
+#### PGD (Projected Gradient Descent)
+- **Epsilon:** 8/255 (standard)
+- **Step Size:** ε/4 = 2/255
+- **Iterations:** 20
+- **Rationale:**
+  - Multi-step attack: much stronger than FGSM
+  - Tests if model has deep adversarial vulnerabilities
+  - ε=8/255 is standard benchmark value
+  - 20 iterations balances compute cost with attack strength
+
+#### BIM (Basic Iterative Method)
+- **Epsilon:** 4/255 (medium strength)
+- **Iterations:** 10
+- **Rationale:**
+  - Simpler iterative attack (iterative FGSM)
+  - Less compute than PGD but stronger than single-step FGSM
+  - Smaller ε (4/255) tests models that survive ε=8/255 PGD
+
+#### Small FGSM (Imperceptible Attacks)
+- **Epsilon Range:** 0 - 4/255
+- **Rationale:**
+  - Tests robustness to imperceptible perturbations
+  - Many adversarially trained models fail here
+  - ε=4/255 = 1/63.75 of pixel range - technically imperceptible
+  - Reveals "false sense of security" on ε=8/255 tests
+
+**Estimated Time:** 15-25 minutes for 100 images
+**Search Budget:** 1500 queries
+**Requirements:** Adversarial Robustness Toolbox (ART)
+
+---
+
+## 3. Realistic Attack Preset (Active + Environmental Threat Model)
+
+**Purpose:** Test robustness to adversarial attacks under realistic environmental conditions.
+
+**Threat Model:** ⭐ **Key innovation!** Active attacker exploiting environmental degradation:
+- Attacker observes environmental conditions
+- Waits for low-light, blur, compression, etc.
+- Uses SMALLER adversarial perturbations
+- Success rate with ε=2/255 + low-light > ε=8/255 on clean image
+
+### Attack Scenarios
+
+#### Low-Light + FGSM (Nighttime Attack)
+**Components:**
+- Brightness: 0.4 - 0.7 (40-60% darker, dusk to night)
+- FGSM ε: 0 - 4/255 (half of standard ε)
+
+**Threat Scenario:** Security camera at night
+- Attacker places adversarial object during low-light hours
+- Uses smaller perturbation (easier to hide)
+- Model might fail at ε=2/255 + low-light when it passes ε=8/255 on clean
+
+**Why It Matters:**
+- Standard tests: "FGSM robust to ε=8/255" ✓
+- Realistic test: "FGSM fails at ε=2/255 in low-light" ✗
+- Blind spot: Attacker timing > attack strength
+
+#### Motion Blur + PGD (Fast-Moving Target)
+**Components:**
+- Gaussian Blur: σ=1.5-3.0 (defocus from fast motion)
+- PGD ε: 2/255 (small perturbation)
+- Iterations: 10 (limited compute during motion)
+
+**Threat Scenario:** Autonomous vehicle at high speed
+- Fast motion → motion blur in frames
+- Attacker optimizes perturbation during motion
+- Smaller ε needed because blur obscures non-adversarial details
+
+**Why It Matters:**
+- Blur and adversarial both degrade images
+- Combined: synergistic effect worse than either alone
+- Iterative attacker has limited compute budget during motion
+
+#### Heavy Compression + FGSM (Video Transmission)
+**Components:**
+- JPEG Quality: 30 - 50 (heavy compression, blocky artifacts)
+- FGSM ε: 0 - 4/255
+
+**Threat Scenario:** Security system with lossy video transmission
+- Attacker injects adversarial object before JPEG encoding
+- Compression artifacts hide perturbation
+- Smaller ε sufficient because compression masks it
+
+**Why It Matters:**
+- Compression and adversarial both degrade signal
+- Attacker can exploit compression for stealth
+- ε=4/255 + compression > ε=8/255 on clean
+
+#### Triple Threat: Low-Light + Noise + Tiny FGSM (Worst Case)
+**Components:**
+- Brightness: 0.5 - 0.7 (dim)
+- Gaussian Noise: σ=0.01-0.03 (sensor noise)
+- FGSM ε: 0 - 2/255 (imperceptible)
+
+**Threat Scenario:** Outdoor sensor in harsh conditions
+- Multiple environmental factors combine
+- Attacker uses imperceptible perturbation
+- Success with ε=1/255 + poor conditions > clean image test
+
+**Why It Matters:**
+- Real world: multiple stressors always present
+- Standard tests: single factor at a time
+- This preset reveals worst-case vulnerability
+
+#### Low Contrast + BIM (Hazy Conditions)
+**Components:**
+- Contrast: 0.5 - 0.7 (washed out, foggy)
+- BIM ε: 3/255, iterations: 5 (reduced compute in low contrast)
+
+**Threat Scenario:** Foggy/hazy weather conditions
+- Low contrast + reduced compute
+- BIM attack optimized for degraded image quality
+- Smaller ε needed because details are already lost
+
+**Why It Matters:**
+- Weather conditions common in real deployments
+- Combined with iterative attack
+- Tests robustness to environmental + temporal constraint (limited inference budget)
+
+**Estimated Time:** 20-30 minutes for 100 images
+**Search Budget:** 2500 queries
+**Requirements:** Adversarial Robustness Toolbox (ART)
+
+**Validation Approach:**
+- For each scenario, verify:
+  1. Robustness score: realistic_attack < natural (environmental helps attacker)
+  2. Vulnerability detection: if realistic_attack << min(natural, adversarial), flag as critical
+  3. Environmental component alone: should preserve ~85-90% labels
+  4. Adversarial component alone: should find failures
+  5. Combined: should find more failures than either alone
+
+---
+
+## 4. Comprehensive Preset (All Threat Models)
+
+**Purpose:** Complete robustness evaluation across all three threat models in a single run.
+
+**Output:** Per-threat-model scores with opportunistic vulnerability detection.
+
+**Threat Models Tested:**
+- Natural: 6 strategies (single + compositional natural perturbations)
+- Adversarial: 2 strategies (FGSM, PGD)
+- Realistic Attack: 3 scenarios (low-light+FGSM, blur+PGD, compression+FGSM)
+
+**Use Case:**
+- Research benchmarking (publication-ready results)
+- Complete model evaluation
+- Comparing architectures across threat models
+- Security certification
+
+**Opportunistic Vulnerability Detection:**
+
+The preset automatically flags models vulnerable to opportunistic attacks:
+
+```
+Natural robustness:    75.0%
+Adversarial robust:    60.0%
+Realistic attack:      45.0%
+
+If realistic_attack << min(natural, adversarial):
+  🚨 CRITICAL: Model vulnerable to opportunistic attacks!
+  Implication: Attackers can exploit environmental timing
+```
+
+**Estimated Time:** 45-60 minutes for 100 images
+**Search Budget:** 5000 queries
+**Requirements:** Adversarial Robustness Toolbox (ART)
+
+---
+
+## 5. Lighting Preset (Legacy, Deprecated)
 
 **Purpose:** Test robustness to illumination changes (brightness, contrast, gamma).
 
@@ -134,7 +380,7 @@ This document explains the design rationale and parameter ranges for each VisPro
 
 ---
 
-## 3. Blur Preset
+## 6. Blur Preset (Legacy, Deprecated)
 
 **Purpose:** Test robustness to blur, motion, and compression artifacts.
 
@@ -187,7 +433,7 @@ This document explains the design rationale and parameter ranges for each VisPro
 
 ---
 
-## 4. Corruption Preset
+## 7. Corruption Preset (Legacy, Deprecated)
 
 **Purpose:** Test robustness to noise, heavy compression, and signal degradation.
 
@@ -238,7 +484,88 @@ This document explains the design rationale and parameter ranges for each VisPro
 
 ---
 
-## Range Selection Methodology
+---
+
+## Threat-Model-Aware Design Principles
+
+### Design Rationale
+
+VisProbe 2.0 introduces threat-model-aware presets to address a critical gap in standard robustness testing:
+
+**The Problem with Existing Approaches:**
+1. **ImageNet-C, RobustBench, etc.** test natural perturbations in isolation
+2. **Adversarial robustness papers** test ε=8/255 attacks on CLEAN images
+3. **Real attackers** are smarter: they exploit environmental timing
+   - Wait for low-light (harder for model to recognize details)
+   - Use smaller ε (easier to hide in degraded image)
+   - Success with ε=2/255 + low-light > ε=8/255 on clean
+
+**Our Solution:**
+- **`natural`** preset: Baseline environmental robustness
+- **`adversarial`** preset: Baseline adversarial robustness
+- **`realistic_attack`** preset: **CRITICAL** - the intersection
+- **`comprehensive`** preset: All three with vulnerability detection
+
+### Opportunistic Vulnerability Detection
+
+The key insight is **gap analysis**:
+
+```
+If:  realistic_attack_score << min(natural_score, adversarial_score)
+Then: Model has blind spot to opportunistic attacks
+```
+
+**Example:**
+- Natural robustness: 75% (passes most environmental tests)
+- Adversarial robustness: 70% (passes most attacks on clean images)
+- Realistic attack: 40% (FAILS - vulnerable when combined!)
+
+**Interpretation:**
+- Model seems reasonably robust individually
+- But attackers can exploit timing to win with weaker attacks
+- Security certification: FAILS without realistic attack testing
+
+### Validation Strategy for Threat-Model-Aware Presets
+
+**For each threat-aware preset, validate:**
+
+1. **Label Preservation (85-90% target)**
+   - Generate 50+ images per strategy
+   - Manual review: are they still recognizable?
+   - If < 85%: reduce severity ranges
+   - If > 95%: ranges are very conservative (acceptable)
+
+2. **Threat Model Isolation**
+   - Natural preset: pure environmental (no gradient-based attacks)
+   - Adversarial preset: pure white-box attacks (clean images only)
+   - Realistic attack: intentional combination (verify both components present)
+
+3. **Failure Correlation**
+   - Test samples that fail natural + adversarial
+   - Verify realistic_attack fails on meaningful subset
+   - Ensure realistic < natural + adversarial (attacker gains from timing)
+
+4. **Opportunistic Detection**
+   - For each test model:
+     - Calculate threat-model scores
+     - Flag if realistic_attack << min(natural, adversarial)
+     - Verify flag accuracy with human inspection
+
+### Future Work
+
+**Additional Threat-Model-Aware Presets:**
+1. **`detection_failure`** - Attacks that fool object detectors (not classification)
+2. **`weather`** - Realistic weather scenarios (rain, snow, fog)
+3. **`adversarial_natural`** - Natural-looking adversarial attacks (same threat model as realistic but different scenarios)
+
+**Automated Threat Model Detection:**
+- Input: test results from natural + adversarial presets
+- Output: recommendation for which realistic_attack scenarios to prioritize
+- Example: "Model is weak to brightness + FGSM, recommend lowlight_fgsm testing"
+
+---
+
+## Range Selection Methodology (Legacy - Updated for Threat Models)
 
 ### Step 1: Literature Review
 - Reviewed ranges from ImageNet-C, RobustBench, AugMax

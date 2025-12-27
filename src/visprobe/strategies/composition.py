@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import torch
 
-from .base import Perturbation
+from .perturbation_base import Perturbation
 
 __all__ = [
     "Compose",

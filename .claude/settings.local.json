@@ -25,7 +25,16 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(ls:*)",
+      "Bash(for:*)",
+      "Bash(do echo \"=== Checking $file ===\" grep -E \"\\]\\(\\.\\./.*examples/|COMPREHENSIVE_API|TROUBLESHOOTING|PRESET_DESIGN|README\\.md\" \"$file\")",
+      "Bash(git checkout:*)",
+      "Bash(__NEW_LINE__ echo \"✓ Checking final file structure...\" echo \"\" echo \"src/visprobe/strategies/ files:\" ls -1 /Users/bilgedemirkaya/Desktop/VisProbe/src/visprobe/strategies/*.py)",
+      "Bash(xargs:*)",
+      "Bash(sort echo \"\" echo \"visfuzz directory status:\" if [ -d \"/Users/bilgedemirkaya/Desktop/VisProbe/visfuzz\" ])",
+      "Bash(then echo \"  ✗ visfuzz directory still exists!\" else echo \"  ✓ visfuzz directory deleted\" fi)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []

@@ -1,7 +1,7 @@
 """
-Search mode implementations (adaptive, grid, random, binary) extracted from runner.
+Search mode implementations (adaptive, grid, random, binary) for threshold discovery.
 
-Uses improved visfuzz search algorithms with:
+Provides efficient perturbation threshold search with:
 - Exponential exploration for faster bound discovery
 - Golden section search for efficient refinement
 - Evaluation caching to avoid redundant model queries
@@ -20,14 +20,6 @@ logger = logging.getLogger(__name__)
 from ..strategies.base import Strategy  # noqa: E402
 from .model_wrap import _ModelWithIntermediateOutput  # noqa: E402
 from .query_counter import QueryCounter  # noqa: E402
-
-# Import visfuzz search utilities for improved algorithms
-try:
-    from visfuzz.search import EvaluationCache
-    VISFUZZ_AVAILABLE = True
-except ImportError:
-    VISFUZZ_AVAILABLE = False
-    EvaluationCache = None  # type: ignore
 
 
 # ===== Helper Functions =====

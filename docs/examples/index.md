@@ -1,6 +1,6 @@
 # Examples
 
-**For complete working examples, see:** [examples/](../../examples/)
+**For complete working examples, see:** [examples/ folder on GitHub](https://github.com/bilgedemirkaya/VisProbe/tree/main/examples)
 
 ## Quick Examples
 
@@ -38,22 +38,18 @@ if report.score < 0.70:
     report.export_failures(n=20)
 ```
 
-### 3. Compare Presets
+### 3. Compare Threat Models
 
 ```python
-from visprobe import quick_check
+from visprobe import compare_threat_models
 
-presets = ["standard", "lighting", "blur", "corruption"]
-results = {}
+# Test all three threat models at once
+results = compare_threat_models(model, test_data, budget=1000)
 
-for preset_name in presets:
-    report = quick_check(model, test_data, preset=preset_name, budget=500)
-    results[preset_name] = report.score
-    print(f"{preset_name}: {report.score:.1%}")
-
-# Find weakest area
-weakest = min(results.items(), key=lambda x: x[1])
-print(f"\nWeakest area: {weakest[0]}")
+# Results include per-threat-model scores
+print(f"Natural:        {results['scores']['natural']:.1%}")
+print(f"Adversarial:    {results['scores']['adversarial']:.1%}")
+print(f"Realistic:      {results['scores']['realistic_attack']:.1%}")
 ```
 
 ### 4. Custom Normalization
@@ -93,48 +89,46 @@ for strategy, failures in by_strategy.items():
 
 ## Complete Examples
 
-For full, runnable examples:
+For full, runnable examples, visit the [examples/ folder on GitHub](https://github.com/bilgedemirkaya/VisProbe/tree/main/examples):
 
-### [examples/basic_example.py](../../examples/basic_example.py)
+### basic_example.py
 Minimal 3-line example showing the simplest possible usage.
 
 **Run time:** ~30 seconds
 
-### [examples/cifar10_example.py](../../examples/cifar10_example.py)
+### cifar10_example.py
 Complete CIFAR-10 workflow with proper normalization, failure analysis, and export.
 
 **Run time:** ~5-10 minutes
 
-### [examples/custom_model_example.py](../../examples/custom_model_example.py)
+### custom_model_example.py
 Template you can copy and modify for your own model.
 
 **Includes:**
 - Data loading
-- Preset selection
+- Threat-model-aware preset selection
 - Result interpretation
 - Best practices
 
-### [examples/preset_comparison.py](../../examples/preset_comparison.py)
-Compare all 4 presets to identify model weak points.
+### threat_model_comparison.py
+Compare all three threat models to identify vulnerabilities to opportunistic attacks.
 
 **Output:**
-- Per-preset scores
-- Weakest area identification
-- Recommendations
+- Per-threat-model scores
+- Vulnerability detection
+- Gap analysis recommendations
 
-## Jupyter Notebook
+### quickstart.ipynb (Jupyter Notebook)
 
 For an interactive walkthrough:
 
-### [examples/quickstart.ipynb](../../examples/quickstart.ipynb)
-
 **Covers:**
 - Installation
-- Basic usage
+- Basic usage (all threat models)
 - Result interpretation
 - Failure analysis
 - Export and retraining
-- Preset comparison
+- Threat model comparison
 
 **Time to complete:** 10-15 minutes
 
@@ -184,7 +178,7 @@ if report.score < 0.80:
 
 ## Next Steps
 
-- **Try the examples:** Run `python examples/basic_example.py`
+- **Try the examples:** Clone the repo and run examples from [GitHub](https://github.com/bilgedemirkaya/VisProbe/tree/main/examples)
 - **Read the guide:** See [User Guide](../user-guide.md)
-- **Full API reference:** See [API Reference](../../COMPREHENSIVE_API_REFERENCE.md)
-- **Troubleshooting:** See [TROUBLESHOOTING.md](../../TROUBLESHOOTING.md)
+- **Full API reference:** See [API Reference](../COMPREHENSIVE_API_REFERENCE.md)
+- **Troubleshooting:** See [TROUBLESHOOTING.md](../TROUBLESHOOTING.md)

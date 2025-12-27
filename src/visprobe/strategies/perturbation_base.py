@@ -1,5 +1,5 @@
 """
-Base perturbation class for visfuzz.
+Base perturbation classes for VisProbe.
 
 Provides a clean, GPU-optimized interface for image perturbations.
 """

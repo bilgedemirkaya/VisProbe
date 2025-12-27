@@ -108,39 +108,145 @@ report.export_failures(n=20, output_dir="./hard_cases")
 
 ---
 
-## 🎨 Presets
+## 🎨 Threat-Model-Aware Presets
 
-VisProbe includes 4 validated presets covering common robustness concerns:
+VisProbe 2.0 introduces a **threat-model-aware preset system** that properly distinguishes between different types of robustness threats:
 
-| Preset | Use Case | Perturbations | Time (100 imgs) |
-|--------|----------|---------------|-----------------|
-| **`standard`** | General robustness, pre-deployment | Brightness, blur, noise, compression, **+ compositional** | ~15 min |
-| **`lighting`** | Outdoor cameras, varying daylight | Brightness, contrast, gamma, **+ low-light scenarios** | ~8 min |
-| **`blur`** | Motion, defocus, video frames | Gaussian blur, motion blur, compression | ~10 min |
-| **`corruption`** | Lossy transmission, noisy sensors | Noise, compression, degradation | ~10 min |
+### Threat Models
+
+| Threat Model | Description | Presets | When to Use |
+|--------------|-------------|---------|------------|
+| **Passive** | Environmental perturbations only (no adversary) | `natural` | Deployment robustness, production monitoring |
+| **Active** | Gradient-based adversarial attacks | `adversarial` | Security testing, adversarial ML research |
+| **Active + Environmental** | Adversarial attacks under suboptimal conditions | `realistic_attack` | **Real-world threat model** |
+| **All** | Comprehensive evaluation across threat models | `comprehensive` | Research benchmarking, publication-ready |
+
+### Available Presets
+
+#### 1. **`natural`** - Environmental Perturbations (Passive)
+Tests robustness to realistic conditions without adversary:
+- Brightness, contrast, gamma
+- Gaussian blur, motion blur
+- Gaussian noise, JPEG compression
+- **Compositional**: low-light + blur, compression + noise, dim + low-contrast
+
+**Use Case:** Deployment robustness, camera variation testing
+**Time:** ~12-15 min for 100 images
+**Budget:** 2000 queries
+
+```python
+report = quick_check(model, data, preset="natural")
+print(f"Natural robustness: {report.score:.1%}")
+```
+
+#### 2. **`adversarial`** - Gradient-Based Attacks (Active)
+Tests robustness to white-box adversarial attacks:
+- FGSM (ε=8/255)
+- PGD (ε=8/255)
+- BIM (ε=4/255)
+- Small FGSM (ε=4/255)
+
+**Use Case:** Security testing, adversarial ML research
+**Time:** ~15-25 min for 100 images
+**Budget:** 1500 queries
+**Requires:** `pip install adversarial-robustness-toolbox`
+
+```python
+report = quick_check(model, data, preset="adversarial")
+print(f"Adversarial robustness: {report.score:.1%}")
+```
+
+#### 3. **`realistic_attack`** ⭐ - Opportunistic Attacks (Active + Environmental)
+**The critical preset that standard tests miss!** Tests adversarial attacks exploiting environmental conditions:
+
+- **Low-light + FGSM**: Attacker waits for dusk/night, uses tiny perturbation (ε=2-4/255)
+- **Motion blur + PGD**: Targets fast-moving cameras with small ε=2/255
+- **Compression + FGSM**: Exploits lossy video transmission
+- **Triple threat**: Low-light + noise + imperceptible FGSM
+- **Low-contrast + BIM**: Exploits hazy/foggy conditions
+
+**Key Insight**: A model robust to ε=8/255 FGSM on clean images may fail at ε=2/255 in low-light!
+
+**Use Case:** Security-critical deployments, autonomous vehicles, surveillance
+**Time:** ~20-30 min for 100 images
+**Budget:** 2500 queries
+**Requires:** ART
+
+```python
+report = quick_check(model, data, preset="realistic_attack")
+print(f"Realistic attack: {report.score:.1%}")
+
+# Check for vulnerability
+if report.vulnerability_warning:
+    print("🚨 CRITICAL:", report.vulnerability_warning)
+```
+
+#### 4. **`comprehensive`** - All Threat Models
+Complete evaluation across all three threat models with per-threat-model breakdown:
+
+**Use Case:** Research benchmarking, publication-ready results, complete model evaluation
+**Time:** ~45-60 min for 100 images
+**Budget:** 5000 queries
+**Output:** Per-threat-model scores with opportunistic attack detection
+
+```python
+report = quick_check(model, data, preset="comprehensive")
+print(report.threat_model_scores)
+# Output: {'natural': 0.75, 'adversarial': 0.60, 'realistic_attack': 0.45}
+
+# Opportunistic vulnerability detection
+if report.vulnerability_warning:
+    print("Model vulnerable to opportunistic attacks!")
+```
+
+### Convenience Function: Compare All Threat Models
+
+```python
+from visprobe import compare_threat_models
+
+results = compare_threat_models(model, data, budget=1000)
+
+# Outputs comparison summary with vulnerability check
+# results['scores']: {'natural': 0.75, 'adversarial': 0.60, 'realistic_attack': 0.45}
+# results['vulnerability_check']: Warning if realistic_attack << min(natural, adversarial)
+```
+
+### Legacy Presets (Backward Compatible)
+
+The original presets (`standard`, `lighting`, `blur`, `corruption`) are still supported but now marked as deprecated:
+
+```python
+report = quick_check(model, data, preset="standard")
+# DeprecationWarning: Consider using 'natural' for similar results or 'comprehensive' for complete testing
+```
 
 ### What Makes Presets Special?
 
 **Validated Ranges**: Each perturbation range is manually validated to preserve label semantics (~85-90% of perturbed images are still recognizable).
 
-**Compositional Perturbations**: Standard tests miss failures that only occur with *multiple* perturbations applied together. VisProbe tests:
-- **Low-light + blur** (e.g., nighttime dash cam)
-- **Compression + noise** (e.g., degraded video transmission)
-- **Dim + low contrast** (e.g., indoor cameras)
+**Compositional Perturbations**: Standard tests miss failures that only occur with *multiple* perturbations applied together.
 
-This finds **different failures** than testing perturbations individually.
+**Threat-Aware Design**: Each preset explicitly targets a specific threat model, enabling realistic security testing.
 
-### Example: Choosing a Preset
+### Example: Testing Different Threat Models
 
 ```python
-# Testing an outdoor security camera model?
-report = quick_check(model, data, preset="lighting")
+# 1. Deployment robustness
+natural = quick_check(model, data, preset="natural")
+print(f"Natural: {natural.score:.1%}")
 
-# Testing a video processing model?
-report = quick_check(model, data, preset="blur")
+# 2. Security hardening
+adversarial = quick_check(model, data, preset="adversarial")
+print(f"Adversarial: {adversarial.score:.1%}")
 
-# General pre-deployment check?
-report = quick_check(model, data, preset="standard")
+# 3. Real-world threat scenario (THE CRITICAL ONE)
+realistic = quick_check(model, data, preset="realistic_attack")
+print(f"Realistic: {realistic.score:.1%}")
+
+# If realistic is much lower than both natural and adversarial,
+# you've found a critical blind spot!
+if realistic.score < min(natural.score, adversarial.score) - 0.1:
+    print("🚨 Model vulnerable to opportunistic attacks!")
 ```
 
 ---
