@@ -464,13 +464,14 @@ class Report:
         Overall robustness score (0-1, higher is better).
 
         For quick_check tests, returns the average robustness score across all strategies.
-        For given/search tests, returns robust_accuracy if available.
+        For search tests, returns the overall_robustness_score from metrics.
+        For given tests, returns robust_accuracy if available.
 
         Returns:
             Float between 0 and 1, or None if not applicable
         """
-        # For quick_check tests
-        if self.test_type == "quick_check" and self.metrics:
+        # For quick_check and search tests
+        if self.test_type in ("quick_check", "search") and self.metrics:
             return self.metrics.get("overall_robustness_score")
 
         # For traditional tests

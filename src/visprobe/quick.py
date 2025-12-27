@@ -18,7 +18,8 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
 
-from .api.report import Report
+from .report import Report
+from .core.search_engine import SearchEngine
 from .presets import (
     PRESETS,
     PRESET_CATEGORIES,
@@ -304,114 +305,6 @@ def _is_adversarial_strategy(strategy_type: str) -> bool:
     return strategy_type in {"fgsm", "pgd", "bim", "apgd", "square_attack"}
 
 
-def _simple_adaptive_search(
-    model: nn.Module,
-    strategy: Strategy,
-    samples: List[tuple],
-    level_min: float,
-    level_max: float,
-    property_fn: Any,
-    max_queries: int = 100,
-    progress_bar: Optional[tqdm] = None,
-) -> Dict[str, Any]:
-    """
-    Simple adaptive search to find failure threshold for a strategy.
-
-    Args:
-        model: Model to test
-        strategy: Perturbation strategy
-        samples: List of (image, label) tuples
-        level_min: Minimum perturbation level
-        level_max: Maximum perturbation level
-        property_fn: Property function to evaluate
-        max_queries: Maximum number of search iterations
-        progress_bar: Optional tqdm progress bar
-
-    Returns:
-        Dictionary with search results
-    """
-    model.eval()
-
-    # Start with level at min (no perturbation)
-    current_level = level_min
-    step_size = (level_max - level_min) / 10.0  # Initial step
-    queries = 0
-    failures = []
-
-    last_pass_level = level_min
-    first_fail_level = level_max
-
-    # Search for failure threshold
-    while queries < max_queries and step_size > 0.001:
-        queries += 1
-
-        # Test all samples at current level
-        passed_count = 0
-        failed_samples = []
-
-        for idx, (img, label) in enumerate(samples):
-            # Get original prediction
-            with torch.no_grad():
-                orig_out = model(img.unsqueeze(0))
-                orig_pred = torch.argmax(orig_out, dim=-1).item()
-
-            # Apply perturbation
-            perturbed = strategy.generate(img.unsqueeze(0), model, level=current_level)
-
-            # Get perturbed prediction
-            with torch.no_grad():
-                pert_out = model(perturbed)
-                pert_pred = torch.argmax(pert_out, dim=-1).item()
-
-            # Check property (label constant)
-            if orig_pred == pert_pred:
-                passed_count += 1
-            else:
-                failed_samples.append({
-                    "index": idx,
-                    "level": current_level,
-                    "original_pred": orig_pred,
-                    "perturbed_pred": pert_pred,
-                })
-
-        pass_rate = passed_count / len(samples)
-
-        if progress_bar:
-            progress_bar.update(1)
-            progress_bar.set_postfix({"level": f"{current_level:.3f}", "pass_rate": f"{pass_rate:.2%}"})
-
-        # Adaptive step: if passed, increase level; if failed, decrease
-        if pass_rate >= 0.9:  # 90% pass threshold
-            last_pass_level = current_level
-            current_level += step_size
-            if current_level > level_max:
-                current_level = level_max
-                break
-        else:
-            first_fail_level = current_level
-            failures.extend(failed_samples)
-            current_level -= step_size / 2.0
-            step_size /= 2.0  # Halve step size
-
-            if current_level < level_min:
-                current_level = level_min
-                break
-
-    # Calculate robustness score (0-1, higher is better)
-    if level_max > level_min:
-        score = (last_pass_level - level_min) / (level_max - level_min)
-    else:
-        score = 1.0
-
-    return {
-        "failure_threshold": first_fail_level,
-        "last_pass_level": last_pass_level,
-        "robustness_score": score,
-        "queries": queries,
-        "failures": failures[:10],  # Keep top 10
-    }
-
-
 def _compute_threat_model_scores(
     results: List[Dict[str, Any]],
     preset_config: Dict[str, Any],
@@ -642,18 +535,22 @@ def quick_check(
         strategy_name = strat_config.get("name", strat_config["type"])
         print(f"\n  Testing: {strategy_name}")
 
+        # Create SearchEngine with fixed strategy (wrapped in factory)
+        engine = SearchEngine(
+            model=model,
+            strategy_factory=lambda level, s=strategy: s,  # Fixed strategy, ignores level
+            property_fn=property_fn,
+            samples=samples,
+            mode="adaptive",
+            level_lo=level_min,
+            level_hi=level_max,
+            max_queries=queries_per_strategy,
+            device=device_obj,
+        )
+
         # Run adaptive search with progress bar
         with tqdm(total=queries_per_strategy, desc=f"  {strategy_name}", leave=False) as pbar:
-            result = _simple_adaptive_search(
-                model=model,
-                strategy=strategy,
-                samples=samples,
-                level_min=level_min,
-                level_max=level_max,
-                property_fn=property_fn,
-                max_queries=queries_per_strategy,
-                progress_bar=pbar,
-            )
+            result = engine.run(progress_bar=pbar)
 
         result["strategy"] = strategy_name
         result["strategy_type"] = strat_config["type"]

@@ -3,56 +3,33 @@ VisProbe: Find robustness failures in your vision models in 5 minutes.
 
 Quick Start:
     >>> from visprobe import quick_check
-    >>> report = quick_check(model, data, preset="standard")
+    >>> report = quick_check(model, data, preset="natural")
     >>> report.show()
 
-For advanced usage, see visprobe.advanced
+For single-strategy threshold finding:
+    >>> from visprobe import search
+    >>> from visprobe.strategies.image import GaussianNoiseStrategy
+    >>> report = search(model, data, strategy=lambda l: GaussianNoiseStrategy(std_dev=l))
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
-# Primary API - simple and user-friendly
-from .quick import quick_check
-from .api import Report
+# Primary API
+from .quick import quick_check, compare_threat_models
+from .search import search
+from .report import Report
 
 # Modules
-from . import auto_init, presets, properties, strategies
+from . import presets, properties, strategies
 
 __all__ = [
-    # Primary API (use this!)
-    "quick_check",
-    "Report",
+    # Primary API
+    "quick_check",          # Multi-strategy preset testing
+    "search",               # Single-strategy threshold finding
+    "compare_threat_models",  # Compare all threat models
+    "Report",               # Report class
     # Modules
     "properties",
     "strategies",
     "presets",
-    "auto_init",
 ]
-
-# Backward compatibility: Keep decorators available but deprecated
-# Users should migrate to quick_check()
-def __getattr__(name):
-    """Lazy import with deprecation warning for old decorator API."""
-    import warnings
-
-    deprecated_names = ["given", "model", "data_source", "search", "ImageData", "PerturbationInfo"]
-
-    if name in deprecated_names:
-        warnings.warn(
-            f"Importing '{name}' from visprobe is deprecated. "
-            f"Please use quick_check() instead, or import from visprobe.advanced "
-            f"if you need the decorator API. See README.md for migration guide.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        from .api import (
-            ImageData,
-            PerturbationInfo,
-            data_source,
-            given,
-            model,
-            search,
-        )
-        return locals()[name]
-
-    raise AttributeError(f"module 'visprobe' has no attribute '{name}'")

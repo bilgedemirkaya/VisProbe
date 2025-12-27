@@ -72,13 +72,11 @@ def temp_results_dir():
 
 
 @pytest.fixture(autouse=True)
-def reset_registry():
-    """Reset the test registry before each test."""
-    from visprobe.api.registry import TestRegistry
-
-    TestRegistry.clear()
+def reset_test_state():
+    """Reset any test state before each test."""
+    # The old TestRegistry has been removed in favor of the SearchEngine API
+    # This fixture is kept for compatibility but is now a no-op
     yield
-    TestRegistry.clear()
 
 
 @pytest.fixture
